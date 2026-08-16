@@ -1,0 +1,848 @@
+.app {
+  position: relative;
+  /* 100vw는 스크롤바 거터를 포함해 계산되는 브라우저가 있어 가로 overflow의 흔한 원인이 된다.
+     html/body/#root가 이미 width:100%이므로 그대로 이어받는다. */
+  width: 100%;
+  height: 100%;
+  height: 100vh; /* 구형 Safari fallback */
+  height: 100dvh; /* 지원 브라우저에서는 동적 뷰포트 높이 사용 */
+  overflow: hidden;
+  background-color: #05060a;
+}
+
+.app-content {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  /* Safe Zone: 화면 크기에 따라 자연스럽게 늘어나되, iOS Safe Area보다는 항상 크게 확보한다. */
+  padding-top: max(2.2vh, env(safe-area-inset-top, 0px) + 1.6vh);
+  padding-right: max(2.5vw, env(safe-area-inset-right, 0px) + 1.8vw);
+  padding-bottom: max(2.2vh, env(safe-area-inset-bottom, 0px) + 1.6vh);
+  padding-left: max(2.5vw, env(safe-area-inset-left, 0px) + 1.8vw);
+  display: flex;
+  flex-direction: column;
+  gap: 1.6vh;
+  opacity: 1;
+  transition: opacity 0.9s ease;
+}
+
+/* Idle Mode 진입 시 홈 화면 콘텐츠는 페이드아웃하고 조작을 막는다(무거운 효과 없이 opacity만 사용). */
+.app-content.is-idle {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Header row: Clock + Weather card */
+.app-header-row {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: stretch;
+  gap: 2vw;
+  border-bottom: 2px solid #1f2129;
+  padding-bottom: 1.6vh;
+}
+
+.app-main {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+}
+
+.app-footer {
+  flex: 0 0 auto;
+}
+
+/* Clock: 시간 아래에 날짜/요일을 붙여 하나의 묶음처럼 보이게 한다 */
+.clock {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 0.4vh;
+}
+
+.clock-time {
+  font-size: clamp(48px, 8.5vw, 168px);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+
+.clock-info {
+  text-align: left;
+  display: flex;
+  align-items: baseline;
+  gap: 1vw;
+}
+
+.clock-date {
+  font-size: clamp(15px, 2vw, 34px);
+  font-weight: 500;
+}
+
+.clock-weekday {
+  font-size: clamp(15px, 2vw, 34px);
+  font-weight: 500;
+  color: #ff9f43;
+}
+
+/* Shared card look */
+.panel {
+  background-color: #12141a;
+  border: 1px solid #232733;
+  border-radius: 16px;
+}
+
+/* 사진 배경 모드에서는 카드가 반투명해져 사진이 은은하게 비친다. */
+.app.is-photo-mode .panel,
+.app.is-photo-mode .market-item,
+.app.is-photo-mode .schedule-item,
+.app.is-photo-mode .upcoming-card {
+  /* 사진 전체 오버레이는 그대로 두고, 카드 자체만 약 10% 더 진하게 해서
+     밝은 사진 위에서도 날짜 숫자/보조문구 가독성을 확보한다. */
+  background-color: rgba(12, 14, 19, 0.68);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+
+/* Weather card (header) — 정보량 대비 카드가 커 보이지 않도록 컴팩트하게 */
+.weather-card {
+  flex: 0 0 26vw;
+  padding: 1.1vh 1.4vw;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.5vh;
+}
+
+.weather-card-location {
+  font-size: 1.15vw;
+  color: #8b8fa3;
+}
+
+.weather-now {
+  display: flex;
+  align-items: center;
+  gap: 0.8vw;
+}
+
+.weather-icon {
+  font-size: 3.4vw;
+  line-height: 1;
+}
+
+.weather-now-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.weather-temp {
+  font-size: clamp(15px, 2vw, 34px);
+  font-weight: 700;
+}
+
+.weather-condition {
+  font-size: clamp(10px, 1.2vw, 20px);
+  color: #d0d3dc;
+}
+
+.weather-range {
+  font-size: clamp(9px, 1.05vw, 18px);
+  color: #8b8fa3;
+}
+
+.weather-forecast {
+  list-style: none;
+  margin: 0.5vh 0 0;
+  padding-top: 0.5vh;
+  border-top: 1px solid #232733;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.7vw;
+}
+
+.weather-forecast-item {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2vh;
+  font-size: 1vw;
+}
+
+.forecast-label {
+  color: #8b8fa3;
+}
+
+.forecast-icon {
+  font-size: 1.3vw;
+}
+
+.forecast-range {
+  color: #d0d3dc;
+}
+
+.weather-status {
+  font-size: 1.4vw;
+  color: #8b8fa3;
+  margin: auto;
+}
+
+/* Calendar panel: month grid (left) + schedule (right) */
+.calendar-panel {
+  flex: 1 1 0;
+  width: 100%;
+  min-height: 0;
+  display: flex;
+  gap: 2vw;
+  padding: 2vh 2vw;
+  overflow: hidden;
+}
+
+.calendar-grid-area {
+  flex: 1 1 58%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1vh;
+}
+
+.calendar-month-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.calendar-month-title {
+  font-size: clamp(17px, 2.2vw, 38px);
+  font-weight: 700;
+}
+
+.calendar-month-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.6vw;
+}
+
+.calendar-nav-btn,
+.calendar-today-btn {
+  font-family: inherit;
+  font-size: 1.5vw;
+  font-weight: 600;
+  color: #d0d3dc;
+  background-color: #1c1f28;
+  border: 1px solid #232733;
+  border-radius: 8px;
+  padding: 0.6vh 1.1vw;
+  cursor: pointer;
+}
+
+.calendar-weekday-row {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+}
+
+.calendar-weekday {
+  text-align: center;
+  font-size: 1.35vw;
+  color: #8b8fa3;
+  padding-bottom: 0.4vh;
+}
+
+.calendar-cells {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.3vh 0.3vw;
+}
+
+.calendar-cell {
+  font-family: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3vh;
+  color: #f5f6fa;
+  border-radius: 10px;
+}
+
+.calendar-cell.is-outside {
+  opacity: 0.35;
+}
+
+.calendar-cell-day {
+  width: 2.5vw;
+  height: 2.5vw;
+  min-width: 30px;
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: clamp(12px, 1.5vw, 26px);
+}
+
+.calendar-cell.is-today .calendar-cell-day {
+  background-color: #2a6bff;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.calendar-cell.is-selected .calendar-cell-day {
+  box-shadow: 0 0 0 2px #6b9bff;
+}
+
+.calendar-cell-dots {
+  display: flex;
+  gap: 0.25vw;
+  min-height: 6px;
+}
+
+.calendar-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.calendar-legend {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4vh 1.2vw;
+  padding-top: 0.6vh;
+  border-top: 1px solid #232733;
+}
+
+.calendar-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4vw;
+  font-size: 1.2vw;
+  color: #8b8fa3;
+}
+
+.calendar-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+/* Schedule area (right side of calendar panel) */
+.calendar-schedule-area {
+  flex: 1 1 42%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1vh;
+  min-height: 0;
+}
+
+.schedule-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: baseline;
+  gap: 0.6vw;
+}
+
+.panel-title {
+  font-size: clamp(16px, 2.1vw, 36px);
+  font-weight: 700;
+  margin: 0;
+}
+
+.schedule-count {
+  font-size: 1.35vw;
+  color: #8b8fa3;
+}
+
+.schedule-empty {
+  font-size: 1.5vw;
+  color: #8b8fa3;
+}
+
+.schedule-list {
+  flex: 0 1 auto;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.3vh;
+  overflow: hidden;
+}
+
+.schedule-item {
+  display: flex;
+  gap: 0.9vw;
+  background-color: #171a22;
+  border: 1px solid #232733;
+  border-radius: 10px;
+  padding: 1.3vh 1.4vw;
+}
+
+.schedule-item-bar {
+  flex: 0 0 4px;
+  border-radius: 2px;
+}
+
+.schedule-item-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4vh;
+}
+
+.schedule-item-top {
+  display: flex;
+  align-items: baseline;
+  gap: 0.9vw;
+  font-size: clamp(14px, 1.75vw, 30px);
+}
+
+.schedule-item-time {
+  font-weight: 700;
+  color: #7fb8ff;
+}
+
+.schedule-item-title {
+  font-weight: 600;
+}
+
+.schedule-item-meta {
+  display: flex;
+  gap: 1vw;
+  font-size: 1.25vw;
+  color: #8b8fa3;
+}
+
+.schedule-item-status {
+  color: #d0d3dc;
+}
+
+.upcoming-card {
+  flex: 0 0 auto;
+  margin-top: auto;
+  background-color: #171a22;
+  border: 1px solid #232733;
+  border-radius: 10px;
+  padding: 1vh 1.2vw;
+}
+
+.upcoming-label {
+  font-size: 1.1vw;
+  color: #8b8fa3;
+  margin-bottom: 0.5vh;
+}
+
+.upcoming-body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8vw;
+}
+
+.upcoming-main {
+  display: flex;
+  gap: 0.8vw;
+  min-width: 0;
+}
+
+.upcoming-date {
+  font-size: 1.3vw;
+  color: #8b8fa3;
+}
+
+.upcoming-title {
+  font-size: clamp(13px, 1.7vw, 30px);
+  font-weight: 600;
+}
+
+.upcoming-location {
+  font-size: 1.2vw;
+  color: #8b8fa3;
+}
+
+.upcoming-dday {
+  flex: 0 0 auto;
+  font-size: clamp(13px, 1.6vw, 28px);
+  font-weight: 700;
+  color: #ffcc4d;
+}
+
+/* Footer row: Market 패널 + 우측 하단 컨트롤 도크를 나란히 배치한다. */
+.app-footer {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 1.4vw;
+}
+
+/* Market (footer) */
+.market {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4vh;
+  background: none;
+  border: none;
+}
+
+.market-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: 1.6vw;
+}
+
+.market-updated {
+  text-align: right;
+  font-size: clamp(9px, 1vw, 17px);
+  color: #5c6070;
+}
+
+.market-status {
+  font-size: 1.4vw;
+  color: #8b8fa3;
+  text-align: center;
+}
+
+.market-item {
+  flex: 1 1 0;
+  background-color: #12141a;
+  border: 1px solid #232733;
+  border-radius: 14px;
+  padding: 1.4vh 1.4vw;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5vh;
+}
+
+.market-item-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6vw;
+}
+
+.market-name {
+  font-size: clamp(11px, 1.5vw, 26px);
+  color: #8b8fa3;
+  font-weight: 600;
+}
+
+.market-sparkline {
+  width: 5.5vw;
+  height: 2.2vh;
+}
+
+.market-value {
+  font-size: clamp(16px, 2.2vw, 38px);
+  font-weight: 700;
+}
+
+.market-change {
+  font-size: clamp(11px, 1.4vw, 24px);
+  font-weight: 600;
+  color: #d0d3dc;
+}
+
+.market-change.up {
+  color: #ff6b6b;
+}
+
+.market-change.down {
+  color: #6b9bff;
+}
+
+/* 우측 하단 컨트롤 도크: 기본/사진/설정을 작고 눈에 덜 띄게 모아둔다. */
+.control-dock {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.3vw;
+  background-color: rgba(18, 20, 26, 0.55);
+  border: 1px solid rgba(35, 39, 51, 0.6);
+  border-radius: 999px;
+  padding: 0.3vh 0.4vw;
+  opacity: 0.5;
+  transition: opacity 0.25s ease;
+}
+
+.control-dock:hover,
+.control-dock:focus-within {
+  opacity: 1;
+}
+
+.dock-btn {
+  font-family: inherit;
+  font-size: clamp(10px, 1.1vw, 18px);
+  font-weight: 600;
+  color: #8b8fa3;
+  background-color: transparent;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  /* 시각적으로는 작아 보여도 터치 영역은 넉넉하게 확보한다(구형 iPad 오터치 방지). */
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 0.5vw;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dock-btn.active {
+  color: #f5f6fa;
+  background-color: rgba(255, 255, 255, 0.12);
+  font-weight: 700;
+}
+
+.dock-sep {
+  color: #3a3f4e;
+  user-select: none;
+}
+
+/* Photo background mode */
+/* 사진 배경은 부모 wrapper(app-content 등)의 높이/위치에 종속되지 않도록
+   항상 실제 뷰포트 기준(position: fixed)으로 고정한다. 홈 화면/Idle 화면 어디서
+   재사용되든 상단에 빈 공간이 생기지 않고 항상 화면 전체를 덮는다. */
+.photo-background-layer {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+}
+
+.photo-background {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  /* 사진은 항상 원본 비율 그대로, 잘리지 않게 보여준다. 남는 여백은 이 레이어의
+     배경(어두운 기본색)이 그대로 비쳐 검정 여백처럼 보인다. */
+  background-size: contain;
+  background-position: center center;
+  background-repeat: no-repeat;
+  background-color: #05060a;
+}
+
+.photo-background-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 0 10vw;
+  font-size: 1.8vw;
+  color: #a0a0a0;
+}
+
+.photo-overlay {
+  position: absolute;
+  inset: 0;
+  /* 사진 자체는 흐리게 하지 않고, 텍스트 가독성용으로 옅은 dark overlay만 사용한다. */
+  background-color: rgba(0, 0, 0, 0.3);
+  z-index: 1;
+}
+
+/* Idle Mode(대기 화면) 레이어. 항상 마운트되어 있지만 opacity로만 나타나고 사라진다. */
+.idle-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.idle-screen {
+  position: absolute;
+  inset: 0;
+  background-color: #05060a;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.9s ease;
+}
+
+.idle-screen.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.idle-clock {
+  position: absolute;
+  top: max(3vh, env(safe-area-inset-top, 0px) + 2.4vh);
+  left: max(3vw, env(safe-area-inset-left, 0px) + 2.4vw);
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6vh;
+  color: #f5f6fa;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.65);
+}
+
+/* 사진 모드는 '탁상시계 + 디지털 앨범'이 핵심이라 시계를 멀리서도 바로 읽히도록
+   정보모드 시계(.clock-time)보다 크게 키운다. 1366px 기준 약 150~165px가 되도록
+   11.3vw를 기준값으로 사용(기존 9vw 대비 약 25% 증가). */
+.idle-time {
+  font-size: clamp(48px, 11.3vw, 170px);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+
+.idle-date {
+  font-size: clamp(15px, 2.45vw, 36px);
+  font-weight: 500;
+  color: #e2e4ea;
+}
+
+/* Photo manager (settings) modal */
+.photo-manager-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  background-color: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.photo-manager {
+  width: 70vw;
+  max-height: 80vh;
+  background-color: #12141a;
+  border: 1px solid #232733;
+  border-radius: 16px;
+  padding: 3vh 3vw;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.photo-manager-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2vh;
+}
+
+.photo-manager-title {
+  font-size: 2.4vw;
+  font-weight: 700;
+}
+
+.photo-manager-close {
+  font-size: 1.6vw;
+  font-weight: 600;
+  color: #d0d3dc;
+  background-color: transparent;
+  border: 1px solid #232733;
+  border-radius: 8px;
+  padding: 0.8vh 1.4vw;
+  cursor: pointer;
+}
+
+.photo-manager-summary {
+  font-size: 1.6vw;
+  color: #8b8fa3;
+  margin-bottom: 2vh;
+}
+
+.photo-manager-actions {
+  display: flex;
+  gap: 1.2vw;
+  margin-bottom: 2.5vh;
+}
+
+.photo-manager-btn {
+  font-family: inherit;
+  font-size: 1.6vw;
+  font-weight: 600;
+  color: #ffffff;
+  background-color: #232733;
+  border: 1px solid #3a3f4e;
+  border-radius: 8px;
+  padding: 1vh 1.8vw;
+  cursor: pointer;
+}
+
+.photo-manager-btn.danger {
+  color: #ffb4b4;
+  border-color: #5a2a2a;
+}
+
+.photo-manager-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.photo-manager-error {
+  font-size: 1.4vw;
+  color: #ff8080;
+  margin-bottom: 1.5vh;
+}
+
+.photo-manager-confirm {
+  display: flex;
+  align-items: center;
+  gap: 1vw;
+  font-size: 1.4vw;
+  color: #ffb4b4;
+  margin-bottom: 1.5vh;
+}
+
+.photo-manager-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1vh;
+}
+
+.photo-manager-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 1.6vw;
+  background-color: #171a22;
+  border: 1px solid #232733;
+  border-radius: 8px;
+  padding: 1vh 1.4vw;
+}
+
+.photo-manager-item-delete {
+  font-family: inherit;
+  font-size: 1.3vw;
+  color: #ffb4b4;
+  background-color: transparent;
+  border: 1px solid #5a2a2a;
+  border-radius: 6px;
+  padding: 0.5vh 1vw;
+  cursor: pointer;
+}
+
+.photo-manager-empty {
+  font-size: 1.6vw;
+  color: #8b8fa3;
+}
+
+.photo-manager-file-input {
+  display: none;
+}

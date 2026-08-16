@@ -1,0 +1,7 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+  functions = "netlify/functions"
+
+# 각 함수는 코드 안에서 `export const config = { path: '/api/...' }`로 직접 경로를
+# 선언하므로(Netlify Functions v2), 별도 리다이렉트 규칙은 필요 없다.
