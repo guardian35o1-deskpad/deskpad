@@ -16,16 +16,21 @@ function Clock() {
     return () => clearInterval(timer)
   }, [])
 
-  const time = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
-  const date = `${now.getFullYear()}년 ${now.getMonth() + 1}월 ${now.getDate()}일`
+  const hoursMinutes = `${pad(now.getHours())}:${pad(now.getMinutes())}`
+  const seconds = pad(now.getSeconds())
+  const date = `${now.getMonth() + 1}월 ${now.getDate()}일`
   const weekday = WEEKDAYS[now.getDay()]
 
   return (
     <div className="clock">
-      <div className="clock-time">{time}</div>
+      <div className="clock-time">
+        {hoursMinutes}
+        <span className="clock-seconds">{seconds}</span>
+      </div>
       <div className="clock-info">
-        <div className="clock-date">{date}</div>
-        <div className="clock-weekday">{weekday}</div>
+        <span className="clock-date">{date}</span>
+        <span className="clock-info-sep">·</span>
+        <span className="clock-weekday">{weekday}</span>
       </div>
     </div>
   )

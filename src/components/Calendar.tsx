@@ -26,7 +26,14 @@ function formatUpcomingDate(dateKey: string): string {
   return `${date.getMonth() + 1}월 ${date.getDate()}일 (${weekday})`
 }
 
-function Calendar() {
+interface CalendarProps {
+  // App.tsx의 isPhotoMode && isIdle — 지금 Dashboard가 화면에 안 보이는 상태인지.
+  // 이 값이 true -> false로 바뀌는 순간(Dashboard가 새로 보이게 된 순간)을 감지해
+  // 오래된 일정 데이터를 즉시 재조회하는 데만 쓰인다. Idle 판정 로직 자체는 건드리지 않는다.
+  dashboardHidden: boolean
+}
+
+function Calendar({ dashboardHidden }: CalendarProps) {
   const today = useMemo(() => startOfDay(new Date()), [])
   const todayKey = useMemo(() => formatDateKey(today), [today])
 
@@ -35,7 +42,7 @@ function Calendar() {
   const [selectedKey, setSelectedKey] = useState(todayKey)
 
   // 실제 Google Calendar 일정. status: 'loading'|'connected'|'not_connected'|'error'.
-  const { events, status } = useCalendarEvents()
+  const { events, status } = useCalendarEvents(dashboardHidden)
   const displayEvents = events ?? []
 
   const eventsByDate = useMemo(() => groupEventsByDate(displayEvents), [displayEvents])
@@ -44,8 +51,13 @@ function Calendar() {
 
   const selectedEvents = eventsByDate.get(selectedKey) ?? []
 
-  const upcomingEvent = useMemo(
-    () => displayEvents.filter((event) => event.date > todayKey).sort((a, b) => a.date.localeCompare(b.date))[0],
+  // 오늘 일정 아래 남는 공간을 활용해 다음 일정 1건이 아니라 최대 4건을 리스트로 보여준다.
+  const upcomingEvents = useMemo(
+    () =>
+      displayEvents
+        .filter((event) => event.date > todayKey)
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .slice(0, 4),
     [displayEvents, todayKey],
   )
 
@@ -77,8 +89,8 @@ function Calendar() {
   }
 
   return (
-    <section className="panel calendar-panel">
-      <div className="calendar-grid-area">
+    <section className="calendar-panel">
+      <div className="panel calendar-grid-area">
         <div className="calendar-month-header">
           <div className="calendar-month-title">
             {viewYear}년 {viewMonth + 1}월
@@ -153,7 +165,7 @@ function Calendar() {
         </div>
       </div>
 
-      <div className="calendar-schedule-area">
+      <div className="panel calendar-schedule-area">
         <div className="schedule-header">
           <h2 className="panel-title">오늘 일정</h2>
           <span className="schedule-count">{selectedEvents.length}건</span>
@@ -169,7 +181,10 @@ function Calendar() {
                 <div className="schedule-item-body">
                   <div className="schedule-item-top">
                     {event.time && <span className="schedule-item-time">{event.time}</span>}
-                    <span className="schedule-item-title">{event.title}</span>
+                    <span className="schedule-item-title">
+                      {event.category === 'hospital' && '🏥 '}
+                      {event.title}
+                    </span>
                   </div>
                   {(event.location || event.status) && (
                     <div className="schedule-item-meta">
@@ -183,26 +198,35 @@ function Calendar() {
           </ul>
         )}
 
-        {upcomingEvent && (
-          <div className="upcoming-card">
+        {upcomingEvents.length > 0 && (
+          <div className="upcoming-section">
             <div className="upcoming-label">다가오는 일정</div>
-            <div className="upcoming-body">
-              <div className="upcoming-main">
-                <span
-                  className="schedule-item-bar"
-                  style={{ backgroundColor: CATEGORY_COLORS[upcomingEvent.category] }}
-                />
-                <div>
-                  <div className="upcoming-date">
-                    {formatUpcomingDate(upcomingEvent.date)}
-                    {upcomingEvent.time ? ` ${upcomingEvent.time}` : ''}
+            <ul className="upcoming-list">
+              {upcomingEvents.map((event) => (
+                <li className="upcoming-card" key={event.id}>
+                  <div className="upcoming-body">
+                    <div className="upcoming-main">
+                      <span
+                        className="schedule-item-bar"
+                        style={{ backgroundColor: CATEGORY_COLORS[event.category] }}
+                      />
+                      <div>
+                        <div className="upcoming-date">
+                          {formatUpcomingDate(event.date)}
+                          {event.time ? ` ${event.time}` : ''}
+                        </div>
+                        <div className="upcoming-title">
+                          {event.category === 'hospital' && '🏥 '}
+                          {event.title}
+                        </div>
+                        {event.location && <div className="upcoming-location">📍 {event.location}</div>}
+                      </div>
+                    </div>
+                    <div className="upcoming-dday">D-{diffInDays(parseDateKey(event.date), today)}일</div>
                   </div>
-                  <div className="upcoming-title">{upcomingEvent.title}</div>
-                  {upcomingEvent.location && <div className="upcoming-location">📍 {upcomingEvent.location}</div>}
-                </div>
-              </div>
-              <div className="upcoming-dday">D-{diffInDays(parseDateKey(upcomingEvent.date), today)}일</div>
-            </div>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
       </div>

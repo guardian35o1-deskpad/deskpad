@@ -1,3 +1,19 @@
+/* ==========================================================================
+   디자인 토큰 — 달력/일정/날씨/주식 패널이 공통으로 쓰는 배경·테두리·그림자·radius.
+   여기 값만 바꾸면 네 영역이 함께 바뀐다(패널 디자인을 하나의 토큰으로 통일하기 위함).
+   -nested 접미사는 그 패널 "안"에 들어가는 하위 카드(오늘 일정 항목, 다가오는 일정 카드)용 —
+   다중 blur 금지 원칙에 따라 blur/shadow는 없고 배경/테두리 톤만 최상위 패널과 구분된다.
+   ========================================================================== */
+:root {
+  --panel-bg: rgba(12, 14, 19, 0.72);
+  --panel-border: 1px solid rgba(255, 255, 255, 0.1);
+  --panel-radius: 16px;
+  --panel-shadow: 0 6px 22px rgba(0, 0, 0, 0.32);
+  --panel-bg-nested: rgba(23, 26, 34, 0.72);
+  --panel-border-nested: 1px solid rgba(255, 255, 255, 0.07);
+  --panel-radius-nested: 12px;
+}
+
 .app {
   position: relative;
   /* 100vw는 스크롤바 거터를 포함해 계산되는 브라우저가 있어 가로 overflow의 흔한 원인이 된다.
@@ -16,14 +32,15 @@
   width: 100%;
   height: 100%;
   box-sizing: border-box;
-  /* Safe Zone: 화면 크기에 따라 자연스럽게 늘어나되, iOS Safe Area보다는 항상 크게 확보한다. */
-  padding-top: max(2.2vh, env(safe-area-inset-top, 0px) + 1.6vh);
+  /* Safe Zone: 화면 크기에 따라 자연스럽게 늘어나되, iOS Safe Area보다는 항상 크게 확보한다.
+     상단 여백은 시계가 화면에서 가장 먼저 눈에 들어와야 하므로 최소한으로만 확보한다. */
+  padding-top: max(1.3vh, env(safe-area-inset-top, 0px) + 1vh);
   padding-right: max(2.5vw, env(safe-area-inset-right, 0px) + 1.8vw);
   padding-bottom: max(2.2vh, env(safe-area-inset-bottom, 0px) + 1.6vh);
   padding-left: max(2.5vw, env(safe-area-inset-left, 0px) + 1.8vw);
   display: flex;
   flex-direction: column;
-  gap: 1.6vh;
+  gap: 1.1vh;
   opacity: 1;
   transition: opacity 0.9s ease;
 }
@@ -34,14 +51,17 @@
   pointer-events: none;
 }
 
-/* Header row: Clock + Weather card */
+/* Header row: Clock + Weather card. 시간이 화면에서 가장 먼저 보여야 하므로
+   불필요한 상하 여백 없이 두 요소를 같은 높이 기준으로 나란히 배치한다. */
 .app-header-row {
   flex: 0 0 auto;
   display: flex;
-  align-items: stretch;
+  align-items: center;
   gap: 2vw;
-  border-bottom: 2px solid #1f2129;
-  padding-bottom: 1.6vh;
+  border-bottom: 1px solid #1f2129;
+  /* 헤더(시계+날씨)가 화면 상단의 주인공이 되도록 여백을 늘려
+     아래 폰트 확대분이 눌리지 않게 한다(기존 1vh 대비 약 30% 증가). */
+  padding-bottom: 1.3vh;
 }
 
 .app-main {
@@ -54,84 +74,115 @@
   flex: 0 0 auto;
 }
 
-/* Clock: 시간 아래에 날짜/요일을 붙여 하나의 묶음처럼 보이게 한다 */
+/* Clock: 시간 아래에 날짜/요일을 붙여 하나의 묶음처럼 보이게 한다.
+   이 앱은 탁상시계 역할이 1순위라 HH:MM이 화면에서 가장 강한 요소여야 하고,
+   날짜/요일은 월간 달력에서도 확인 가능한 보조 정보라 작게 둔다. */
 .clock {
-  flex: 1 1 auto;
+  /* 시계 : 날씨 폭 비율을 약 51% : 47%(+2vw 간격)로 맞춰 날씨가 구석의
+     작은 위젯이 아니라 시계와 균형을 이루는 상단 핵심 정보가 되게 한다. */
+  flex: 1 1 51%;
   min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   justify-content: center;
-  gap: 0.4vh;
+  gap: 0.2vh;
+  /* 시계는 카드 없이 사진 배경 위에 직접 떠 있으므로(의도된 디자인),
+     밝은 사진 위에서도 읽히도록 옅은 그림자를 둔다. 어두운 배경(사진 없음)에서는
+     사실상 티가 나지 않아 부작용이 없다. */
+  color: #f5f6fa;
+  text-shadow: 0 2px 16px rgba(0, 0, 0, 0.55);
 }
 
 .clock-time {
-  font-size: clamp(48px, 8.5vw, 168px);
+  display: flex;
+  align-items: baseline;
+  gap: 0.5vw;
+  /* 기존 대비 약 40% 확대 — HH:MM이 화면 상단의 주인공이 되도록. */
+  font-size: clamp(66px, 11.9vw, 234px);
   font-weight: 700;
   letter-spacing: 0.02em;
   line-height: 1;
+}
+
+/* 초는 HH:MM 대비 확실히 약하게 — em 단위라 위 clamp 크기를 따라 자동으로 비례한다.
+   HH:MM이 커진 만큼 상대 비율은 오히려 0.42 -> 0.38em으로 살짝 낮춰 초가 과하게 커지지 않게 한다. */
+.clock-seconds {
+  font-size: 0.38em;
+  font-weight: 600;
+  color: #7d8194;
+  letter-spacing: 0;
 }
 
 .clock-info {
   text-align: left;
   display: flex;
   align-items: baseline;
-  gap: 1vw;
+  gap: 0.5vw;
 }
 
 .clock-date {
-  font-size: clamp(15px, 2vw, 34px);
+  font-size: clamp(12px, 1.35vw, 22px);
   font-weight: 500;
+  color: #b7bac6;
+}
+
+.clock-info-sep {
+  font-size: clamp(12px, 1.35vw, 22px);
+  color: #4a4f5e;
 }
 
 .clock-weekday {
-  font-size: clamp(15px, 2vw, 34px);
-  font-weight: 500;
+  font-size: clamp(12px, 1.35vw, 22px);
+  font-weight: 600;
   color: #ff9f43;
 }
 
-/* Shared card look */
+/* Shared card look — 기본 모드도 사진을 배경으로 쓰므로(App.tsx 참고) 패널은
+   항상 반투명 다크로 통일한다(검은 박스가 아니라 사진이 은은하게 비치는 패널).
+   backdrop-filter는 이 최상위 패널급에만, 그것도 아주 약하게 한 번만 적용한다
+   ("다중 blur 금지" — 중첩 카드(schedule-item/upcoming-card)에는 blur를 또 얹지 않음).
+   미지원 브라우저에서는 backdrop-filter가 그냥 무시되고 rgba 배경만 남아 정상 표시된다. */
 .panel {
-  background-color: #12141a;
-  border: 1px solid #232733;
-  border-radius: 16px;
+  background-color: var(--panel-bg);
+  border: var(--panel-border);
+  border-radius: var(--panel-radius);
+  box-shadow: var(--panel-shadow);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
 }
 
-/* 사진 배경 모드에서는 카드가 반투명해져 사진이 은은하게 비친다. */
-.app.is-photo-mode .panel,
-.app.is-photo-mode .market-item,
-.app.is-photo-mode .schedule-item,
-.app.is-photo-mode .upcoming-card {
-  /* 사진 전체 오버레이는 그대로 두고, 카드 자체만 약 10% 더 진하게 해서
-     밝은 사진 위에서도 날짜 숫자/보조문구 가독성을 확보한다. */
-  background-color: rgba(12, 14, 19, 0.68);
-  -webkit-backdrop-filter: blur(6px);
-  backdrop-filter: blur(6px);
-}
-
-/* Weather card (header) — 정보량 대비 카드가 커 보이지 않도록 컴팩트하게 */
+/* Weather card (header) — 좁고 긴 세로 카드가 아니라 넓은 가로형 바 형태로 배치한다.
+   location은 카드 폭 전체를 차지하는 한 줄(flex-basis:100%로 강제 줄바꿈)로 위에 두고,
+   그 아래 현재 날씨(weather-now)와 3일 예보(weather-forecast)를 나란히 배치한다. */
 .weather-card {
-  flex: 0 0 26vw;
-  padding: 1.1vh 1.4vw;
+  /* 고정 34vw 코너 위젯 -> 시계와 균형을 이루는 51:47 비율의 절반 쪽으로 확대
+     (34vw 대비 약 38% 증가, 세로 패딩도 늘려 카드 자체 높이를 키운다). */
+  flex: 1 1 47%;
+  padding: 1vh 1.8vw;
   display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 0.5vh;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 1.4vw;
+  row-gap: 0.3vh;
 }
 
 .weather-card-location {
-  font-size: 1.15vw;
-  color: #8b8fa3;
+  flex: 0 0 100%;
+  font-size: 1.1vw;
+  color: #9298ab;
 }
 
 .weather-now {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 0.8vw;
 }
 
 .weather-icon {
-  font-size: 3.4vw;
+  /* 아이콘 한 단계 확대(3.4vw -> 4.2vw). */
+  font-size: 4.2vw;
   line-height: 1;
 }
 
@@ -141,7 +192,8 @@
 }
 
 .weather-temp {
-  font-size: clamp(15px, 2vw, 34px);
+  /* 현재 온도(예: 24°C)를 시계 확대에 맞춰 더 크게. */
+  font-size: clamp(19px, 2.5vw, 42px);
   font-weight: 700;
 }
 
@@ -156,13 +208,14 @@
 }
 
 .weather-forecast {
+  flex: 1 1 auto;
   list-style: none;
-  margin: 0.5vh 0 0;
-  padding-top: 0.5vh;
-  border-top: 1px solid #232733;
+  margin: 0;
+  padding-left: 1.2vw;
+  border-left: 1px solid #232733;
   display: flex;
   justify-content: space-between;
-  gap: 0.7vw;
+  gap: 0.9vw;
 }
 
 .weather-forecast-item {
@@ -192,23 +245,26 @@
   margin: auto;
 }
 
-/* Calendar panel: month grid (left) + schedule (right) */
+/* Calendar 영역: 달력(좌)과 일정(우)을 하나의 큰 판이 아니라 각각 독립된 카드로
+   시각적으로 완전히 분리한다. .calendar-panel 자체는 이제 두 카드를 배치하는 순수
+   레이아웃 컨테이너일 뿐 자기 배경/테두리는 없다 — 실제 패널 스타일(.panel)은
+   .calendar-grid-area / .calendar-schedule-area 각각에 직접 적용된다(JSX 참고). */
 .calendar-panel {
   flex: 1 1 0;
   width: 100%;
   min-height: 0;
   display: flex;
-  gap: 2vw;
-  padding: 2vh 2vw;
+  gap: 1.6vw;
   overflow: hidden;
 }
 
 .calendar-grid-area {
-  flex: 1 1 58%;
+  flex: 1 1 52%;
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 1vh;
+  padding: 1.6vh 1.8vw;
 }
 
 .calendar-month-header {
@@ -338,14 +394,15 @@
   border-radius: 50%;
 }
 
-/* Schedule area (right side of calendar panel) */
+/* Schedule area (right side of calendar panel) — 이제 자체 .panel 카드다 */
 .calendar-schedule-area {
-  flex: 1 1 42%;
+  flex: 1 1 48%;
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 1vh;
   min-height: 0;
+  padding: 1.6vh 1.8vw;
 }
 
 .schedule-header {
@@ -385,10 +442,12 @@
 .schedule-item {
   display: flex;
   gap: 0.9vw;
-  background-color: #171a22;
-  border: 1px solid #232733;
-  border-radius: 10px;
-  padding: 1.3vh 1.4vw;
+  /* 중첩 카드라 부모 패널(.panel)에 이미 걸린 blur/shadow 위에 또 얹지 않고,
+     톤만 살짝 더 진하게(반투명) + 얇은 밝은 테두리로 두 카드가 겹친 위계를 표현한다. */
+  background-color: var(--panel-bg-nested);
+  border: var(--panel-border-nested);
+  border-radius: var(--panel-radius-nested);
+  padding: 1.2vh 1.4vw;
 }
 
 .schedule-item-bar {
@@ -431,19 +490,42 @@
   color: #d0d3dc;
 }
 
+/* "다가오는 일정" 영역 전체 — 오늘 일정 아래 남는 공간을 그대로 채우는 리스트.
+   기존엔 다음 일정 1건만 margin-top:auto로 맨 아래 고정해서 그 사이가 텅 비어 보였다.
+   이제 최대 4건을 세로 리스트로 나열해 이 공간을 실제 정보로 채운다. */
+.upcoming-section {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5vh;
+  overflow: hidden;
+}
+
+.upcoming-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7vh;
+  overflow: hidden;
+}
+
 .upcoming-card {
   flex: 0 0 auto;
-  margin-top: auto;
-  background-color: #171a22;
-  border: 1px solid #232733;
-  border-radius: 10px;
-  padding: 1vh 1.2vw;
+  background-color: var(--panel-bg-nested);
+  border: var(--panel-border-nested);
+  border-radius: var(--panel-radius-nested);
+  padding: 0.8vh 1.2vw;
 }
 
 .upcoming-label {
+  flex: 0 0 auto;
   font-size: 1.1vw;
   color: #8b8fa3;
-  margin-bottom: 0.5vh;
 }
 
 .upcoming-body {
@@ -498,6 +580,7 @@
   gap: 0.4vh;
   background: none;
   border: none;
+  box-shadow: none;
 }
 
 .market-list {
@@ -522,13 +605,19 @@
 
 .market-item {
   flex: 1 1 0;
-  background-color: #12141a;
-  border: 1px solid #232733;
-  border-radius: 14px;
-  padding: 1.4vh 1.4vw;
+  /* .market 래퍼 자체는 배경이 없어(.panel 미상속) 카드 4개가 각자 최상위 패널처럼
+     보이므로, 여기서도 .panel과 동일한 디자인 토큰을 직접 적용해 달력/일정/날씨 카드와
+     통일한다. */
+  background-color: var(--panel-bg);
+  border: var(--panel-border);
+  border-radius: var(--panel-radius);
+  box-shadow: var(--panel-shadow);
+  padding: 1.2vh 1.4vw;
   display: flex;
   flex-direction: column;
   gap: 0.5vh;
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
 }
 
 .market-item-top {
@@ -641,6 +730,21 @@
   background-color: #05060a;
 }
 
+/* 기본(정보) 모드 전용 고정 배경 — 사용자 등록 사진이 아니라 앱에 내장된 자연 풍경
+   이미지 1장을 항상 그대로 사용한다(사용자 사진은 사진 모드/Idle 액자에서만 등장).
+   사용자 사진(.photo-background)과 달리 "잘리면 안 되는 소중한 원본"이 아니라 장식용
+   고정 배경이라 화면을 항상 꽉 채우는 cover를 쓴다. */
+.default-background {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background-image: url('/backgrounds/default-nature.jpg');
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
+}
+
 .photo-background-empty {
   position: absolute;
   inset: 0;
@@ -659,6 +763,13 @@
   /* 사진 자체는 흐리게 하지 않고, 텍스트 가독성용으로 옅은 dark overlay만 사용한다. */
   background-color: rgba(0, 0, 0, 0.3);
   z-index: 1;
+}
+
+/* 기본(정보) 모드 전용 — 배경 위에 패널이 여러 개 함께 보이므로, 배경 이미지는
+   은은한 배경 역할만 하도록 더 가라앉힌다(무거운 blur 대신 오버레이 농도만 조정,
+   성능 영향 없음). 사진 모드/Idle 액자는 사진 자체가 주인공이라 이 클래스를 쓰지 않는다. */
+.photo-overlay-dim {
+  background-color: rgba(5, 6, 10, 0.5);
 }
 
 /* Idle Mode(대기 화면) 레이어. 항상 마운트되어 있지만 opacity로만 나타나고 사라진다. */

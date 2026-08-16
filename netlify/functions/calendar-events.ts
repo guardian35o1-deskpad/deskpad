@@ -66,7 +66,12 @@ function getSeoulMonthRangeUtcIso(): { timeMin: string; timeMax: string } {
 }
 
 function json(body: unknown, status: number): Response {
-  return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
+  return new Response(JSON.stringify(body), {
+    status,
+    // 상시 켜두는 탁상 디스플레이가 1분마다 이 엔드포인트를 호출하므로, 중간에 오래된 응답이
+    // 캐시되어 새 일정이 반영되지 않는 일이 없도록 명시적으로 no-store를 지정한다.
+    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+  })
 }
 
 export default async () => {

@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# 환경변수(Google Client Secret 등 실제 비밀값) — 예시 파일(.env.example)만 커밋한다
+.env
+.env.*
+!.env.example
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
