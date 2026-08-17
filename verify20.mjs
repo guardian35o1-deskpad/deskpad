@@ -13,6 +13,11 @@ const BASE_URL = 'http://localhost:4300'
 // marketService.ts의 "장이 전부 닫혀 있고 캐시가 있으면 네트워크 호출 자체를 건너뛴다"는
 // 최적화가 끼어들지 않아, 실제로 매 tick/재활성화마다 /api/market이 호출되는지 확인할 수 있다.
 const MARKET_OPEN_TIME = '2026-08-17T10:00:00.000Z'
+// 2026-08-17(월) 08:00 UTC = 한국장(09:00 전) + 미국장(늦은 밤/이른 새벽 아님) 모두 닫혀 있는
+// 시각. "장이 전부 닫혀 있어도 캐시가 무효하면 최초 1회는 반드시 /api/market을 호출한다"는
+// 동작을 검증하려면 일부러 이렇게 장이 닫힌 시각을 써야 한다(열려 있으면 애초에 openSymbols가
+// 비지 않아 이 분기 자체를 안 타므로 검증 의미가 없음).
+const MARKET_CLOSED_TIME = '2026-08-17T08:00:00.000Z'
 
 const results = []
 function check(label, ok, detail) {
@@ -131,10 +136,14 @@ async function main() {
     await page.clock.install({ time: new Date(MARKET_OPEN_TIME) })
 
     // localStorage에 marketService.ts가 쓰는 캐시 키를 직접 시드해 "이전에 정상 수신한 적 있음" 상태를 만든다.
+    // version/source는 marketService.ts의 CACHE_VERSION(2)/live provider와 반드시 같아야
+    // "유효한 이전 캐시"로 인정된다 — 다르면 마지막 값 유지 검증(9~10번) 자체가 성립하지 않는다.
     await page.addInitScript(() => {
       window.localStorage.setItem(
         'deskpad:market-cache',
         JSON.stringify({
+          version: 2,
+          source: 'live',
           updatedAt: '2026-08-17T04:00:00.000Z',
           quotes: [
             { symbol: 'KOSPI', name: 'KOSPI', price: 2640, change: 5, changePercent: 0.19, history: [], updatedAt: '2026-08-17T04:00:00.000Z' },
@@ -212,6 +221,58 @@ async function main() {
     await page.waitForTimeout(200)
 
     check('12) 화면 재활성화(visibilitychange) 시 즉시 재조회', callCount > before, { before, after: callCount })
+
+    await context.close()
+  }
+
+  // ---- 13~14) 실데이터 전환 후 실기기에서 실제로 겪은 문제 재현: 예전 mock 캐시가 남아 있고
+  // + 장이 전부 닫혀 있어도, 최초 1회는 반드시 /api/market을 호출해 live 값으로 교체돼야 한다 ----
+  {
+    const context = await browser.newContext({ viewport: { width: 2048, height: 1536 } })
+    const page = await context.newPage()
+    await page.clock.install({ time: new Date(MARKET_CLOSED_TIME) })
+
+    // 실데이터 연동 전(mock 시절)에 저장됐던 옛 캐시를 그대로 재현 — version/source 필드가
+    // 아예 없는 구세대 스키마 + 그 시절 mock 고정값(2,650.32 등).
+    await page.addInitScript(() => {
+      window.localStorage.setItem(
+        'deskpad:market-cache',
+        JSON.stringify({
+          updatedAt: '2026-08-17T04:59:00.000Z',
+          quotes: [
+            { symbol: 'KOSPI', name: 'KOSPI', price: 2650.32, change: 11.07, changePercent: 0.42, history: [], updatedAt: '2026-08-17T04:59:00.000Z' },
+            { symbol: 'KOSDAQ', name: 'KOSDAQ', price: 845.1, change: 2.35, changePercent: 0.28, history: [], updatedAt: '2026-08-17T04:59:00.000Z' },
+            { symbol: 'SPX', name: 'S&P 500', price: 5540.55, change: 6.1, changePercent: 0.11, history: [], updatedAt: '2026-08-17T04:59:00.000Z' },
+            { symbol: 'IXIC', name: 'NASDAQ', price: 17850.1, change: -32.4, changePercent: -0.18, history: [], updatedAt: '2026-08-17T04:59:00.000Z' },
+          ],
+        }),
+      )
+    })
+
+    let apiCalled = false
+    await routeMarket(page, () => {
+      apiCalled = true
+      // mock 캐시와는 값이 다른 "새로운 live 값"을 돌려준다 — 화면에 이 값이 떠야
+      // 옛 mock 캐시를 그대로 보여주고 있는 게 아니라 실제로 새로 호출했다는 증거가 된다.
+      return marketPayload({
+        quotes: marketPayload().quotes.map((q) => ({ ...q, value: q.value + 1, updatedAt: '2026-08-17T07:55:00.000Z' })),
+      })
+    })
+    await page.goto(BASE_URL)
+    await page.waitForSelector('.market-item')
+    await page.waitForTimeout(300)
+
+    check('13) 장이 전부 닫혀 있어도(캐시가 옛 mock 세대라 무효) 최초 1회는 /api/market을 호출함', apiCalled)
+
+    const kospiValue = await page.evaluate(() => document.querySelectorAll('.market-item')[0]?.querySelector('.market-value')?.textContent)
+    check('13) 화면에 옛 mock 값(2,650.32)이 아니라 새 live 값(2,651.32)이 표시됨', kospiValue === '2,651.32', kospiValue)
+
+    const storedCache = await page.evaluate(() => JSON.parse(window.localStorage.getItem('deskpad:market-cache') ?? 'null'))
+    check(
+      '14) localStorage 캐시가 새 스키마(version/source: live)로 교체 저장됨',
+      storedCache?.version === 2 && storedCache?.source === 'live',
+      storedCache && { version: storedCache.version, source: storedCache.source },
+    )
 
     await context.close()
   }
