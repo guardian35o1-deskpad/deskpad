@@ -20,7 +20,21 @@
 - 수정 전: 기존 코드/호출 관계/데이터 흐름을 먼저 파악하고, 작업 목적·수정 파일·영향 범위·위험 요소를 정리한다.
 - 요청하지 않은 대규모 리팩터링이나 구조 변경은 하지 않는다. DB/스키마/공통 계산 로직을 바꿀 때는 실행 전에 이유와 영향 범위를 설명한다.
 - 작업 단위마다: `npm run build`로 TypeScript 에러 0건 확인 → (Netlify Functions를 건드렸다면) `npx tsc --noEmit -p netlify/functions/tsconfig.json`도 확인 → 관련 있으면 Playwright로 동작 검증.
-- 완료 후 변경 파일은 `SendUserFile`로 전달하고 `mcp__remote-devices__device_commit_files`로 `E:\deskpad`에 반영, `roadmap.md`(project memory)에 완료 항목/변경 이유/구현 내용/검증 결과를 기존 형식대로 기록한다.
+- 완료 후 변경 파일은 `SendUserFile`로 전달하고 `mcp__remote-devices__device_commit_files`로 `E:\deskpad`에 반영, `roadmap.md`(project memory)에 완료 항목/변경 이유/구현 내용/검증 결과를 기존 형식대로 기록한다(이 roadmap 기록 자체는 상세하게 — 아래 보고 형식은 사용자에게 보여주는 채팅 응답에만 적용).
+
+### 2-1. 작업 완료 후 채팅 보고 형식 (매 단위 작업마다)
+
+작업 완료 후 보고는 최대 5줄로 간단히 한다.
+
+```
+변경: 핵심 수정 1~2줄
+테스트: build 및 주요 테스트 결과
+상태: 로컬/Git/배포 여부
+문제: 남은 문제 있을 때만
+다음: 사용자가 확인할 것 1줄
+```
+
+변경 파일 전체 목록, 테스트 파일명, 세부 구현 과정은 사용자가 요청할 때만 설명한다. (이 절은 "작업 마감" 시 3-9 최종 보고 형식과는 별개 — 평소 매 작업 완료 보고에 적용한다.)
 
 ## 3. 작업 마감 자동화 규칙
 

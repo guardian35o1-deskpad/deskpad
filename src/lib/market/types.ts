@@ -4,8 +4,14 @@ export interface MarketQuote {
   price: number
   change: number
   changePercent: number
+  // 실제 API에서 안정적인 인트라데이 시세열을 확보하지 못한 지수는 history를 비워둔다.
+  // Market.tsx는 history가 비어 있으면(길이 0~1) 미니 그래프를 그리지 않고 숨긴다 —
+  // 가짜/추정 그래프를 그리지 않기 위함.
   history: number[]
   updatedAt: string // ISO 문자열
+  // 이번 갱신 시도가 실패해서 마지막으로 성공했던 값을 그대로 보여주고 있으면 true.
+  // Market.tsx가 아주 작은 "지연" 표시를 붙이는 데만 쓴다(카드 레이아웃은 바꾸지 않음).
+  stale?: boolean
 }
 
 export type Exchange = 'KRX' | 'US'

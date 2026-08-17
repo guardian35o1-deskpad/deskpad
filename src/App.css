@@ -620,6 +620,13 @@
   backdrop-filter: blur(3px);
 }
 
+/* 이번 갱신에서 이 지수만 실패해서 마지막 정상값을 그대로 보여주고 있을 때(marketService.ts의
+   per-symbol stale 병합, 또는 값을 한 번도 못 받아온 자리) — 카드 레이아웃은 그대로 두고
+   아주 살짝만 어둡게 해 "지연 중"임을 표시한다. */
+.market-item.is-stale {
+  opacity: 0.62;
+}
+
 .market-item-top {
   display: flex;
   align-items: center;

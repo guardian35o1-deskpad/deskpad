@@ -1,8 +1,11 @@
 import { useMarket } from '../hooks/useMarket'
 import type { MarketQuote } from '../lib/market/types'
+import { WATCHED_INDICES } from '../lib/market/types'
 
 const SPARKLINE_WIDTH = 100
 const SPARKLINE_HEIGHT = 28
+// 이보다 점이 적으면(장 마감 직후 등) 추세선이라 부르기 어려워, 미니 그래프를 아예 숨긴다.
+const MIN_SPARKLINE_POINTS = 5
 
 function formatChange(value: number) {
   const sign = value > 0 ? '+' : ''
@@ -37,20 +40,25 @@ function MarketItem({ quote }: { quote: MarketQuote }) {
   const direction = quote.changePercent > 0 ? 'up' : quote.changePercent < 0 ? 'down' : ''
   const strokeColor = direction === 'up' ? '#ff6b6b' : direction === 'down' ? '#6b9bff' : '#9aa0a6'
   const arrow = direction === 'up' ? '▲' : direction === 'down' ? '▼' : '–'
-  const points = buildSparklinePoints(quote.history)
+  // 실제 인트라데이 데이터가 충분히 확보되지 않으면(예: Naver는 시세열을 안 줌, Yahoo도 장
+  // 마감 직후엔 점이 적음) 가짜 추세선을 그리지 않고 미니 그래프 자체를 숨긴다.
+  const hasSparkline = quote.history.length >= MIN_SPARKLINE_POINTS
+  const points = hasSparkline ? buildSparklinePoints(quote.history) : ''
 
   return (
-    <li className="market-item">
+    <li className={`market-item ${quote.stale ? 'is-stale' : ''}`}>
       <div className="market-item-top">
         <span className="market-name">{quote.name}</span>
-        <svg
-          className="market-sparkline"
-          viewBox={`0 0 ${SPARKLINE_WIDTH} ${SPARKLINE_HEIGHT}`}
-          preserveAspectRatio="none"
-          aria-hidden="true"
-        >
-          <polyline points={points} fill="none" stroke={strokeColor} strokeWidth={2} />
-        </svg>
+        {hasSparkline && (
+          <svg
+            className="market-sparkline"
+            viewBox={`0 0 ${SPARKLINE_WIDTH} ${SPARKLINE_HEIGHT}`}
+            preserveAspectRatio="none"
+            aria-hidden="true"
+          >
+            <polyline points={points} fill="none" stroke={strokeColor} strokeWidth={2} />
+          </svg>
+        )}
       </div>
       <span className="market-value">{quote.price.toLocaleString('ko-KR', { maximumFractionDigits: 2 })}</span>
       <span className={`market-change ${direction}`}>
@@ -60,19 +68,42 @@ function MarketItem({ quote }: { quote: MarketQuote }) {
   )
 }
 
+// 한 번도 값을 받아오지 못한 지수(예: 소스가 계속 실패)도 카드 자체는 항상 같은 자리에 그대로
+// 유지하고, 값 자리만 "--"로 표시한다 — 지수 하나가 실패했다고 카드 배치 전체가 흔들리지 않게.
+function MarketItemPlaceholder({ name }: { name: string }) {
+  return (
+    <li className="market-item is-stale">
+      <div className="market-item-top">
+        <span className="market-name">{name}</span>
+      </div>
+      <span className="market-value">--</span>
+      <span className="market-change">–</span>
+    </li>
+  )
+}
+
 function Market() {
   const { quotes, updatedAt, loading, error, isMock } = useMarket()
+  const quoteBySymbol = new Map(quotes.map((quote) => [quote.symbol, quote]))
+  // 아직 한 번도 아무 값도 못 받아온 최초 로딩/전체 실패 상태에서는 기존처럼 안내 문구만 보여준다.
+  // 하나라도 값이 있으면(부분 성공 포함) 4개 카드 자리를 항상 그대로 유지한다.
+  const hasAnyQuote = quotes.length > 0
 
   return (
     <section className="panel market">
-      {quotes.length > 0 ? (
+      {hasAnyQuote ? (
         <>
           <ul className="market-list">
-            {quotes.map((quote) => (
-              <MarketItem quote={quote} key={quote.symbol} />
-            ))}
+            {WATCHED_INDICES.map((item) => {
+              const quote = quoteBySymbol.get(item.symbol)
+              return quote ? (
+                <MarketItem quote={quote} key={item.symbol} />
+              ) : (
+                <MarketItemPlaceholder name={item.name} key={item.symbol} />
+              )
+            })}
           </ul>
-          {/* 실제 API 연결 전까지는 가짜 값을 실제 시세로 착각하지 않도록 "샘플 데이터"만 표시한다. */}
+          {/* mock provider일 때만 "샘플 데이터"를 표시한다(현재는 실제 API가 연결돼 있어 해당 없음). */}
           <div className="market-updated">{isMock ? '샘플 데이터' : formatUpdatedAt(updatedAt)}</div>
         </>
       ) : (
