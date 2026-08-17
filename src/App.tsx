@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import Clock from './components/Clock'
 import Calendar from './components/Calendar'
 import Weather from './components/Weather'
@@ -19,10 +19,26 @@ function App() {
   // 임시 상태(isIdle, 아래)는 서로 다른 상태다. 화면을 탭해도 mode(viewMode)는 바뀌지 않는다 —
   // 오직 사용자가 도크의 [기본]/[사진] 버튼을 눌렀을 때만 setMode가 호출된다.
   const { mode, setMode } = useViewMode()
-  const { photos, processing, error, addPhotos, removePhoto, clearPhotos } = usePhotos()
+  const {
+    photos,
+    processing,
+    progress,
+    error,
+    addPhotos,
+    removePhoto,
+    clearPhotos,
+    setPhotoActive,
+    setAllPhotosActive,
+  } = usePhotos()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const isPhotoMode = mode === 'photo'
   const { timeoutMs: dashboardRevealTimeoutMs } = useDashboardRevealTimeout()
+
+  // 사진 관리 화면에서 체크 해제(active:false)한 사진은 보관은 계속하되 액자(사진 모드/
+  // 30분 Idle 슬라이드쇼)에는 나오지 않아야 한다 — 두 화면 모두 photos 전체가 아니라
+  // 이 필터링된 목록만 받는다. PhotoManager는 켜고 끄는 UI를 보여줘야 하므로 photos
+  // 전체를 그대로 받는다(아래 참고).
+  const activePhotos = useMemo(() => photos.filter((photo) => photo.active), [photos])
 
   // 기본 모드 = 정보모드: Dashboard를 계속 유지하고, 이 타이머는 아예 동작하지 않는다.
   // 사진 모드 = 사진+시계가 기본(대기) 화면이고, 탭하면 dashboardRevealTimeoutMs(기본 30초)
@@ -31,10 +47,13 @@ function App() {
   const isIdle = useIdleTimer(isPhotoMode, dashboardRevealTimeoutMs, settingsOpen)
   const dashboardHidden = isPhotoMode && isIdle
 
-  // 기본/사진 모드와 무관하게, 30분 동안 조작이 없으면 전체 화면 대기(디지털 액자) 모드로
-  // 전환한다. 도크의 기본/사진 선택(mode)은 건드리지 않고 그 위에 오버레이로만 얹힌다 —
-  // 터치하면 오버레이만 사라지고 원래 보던 화면(기본/사진 모드 그대로)이 다시 보인다.
-  const isLongIdle = useLongIdleTimer(LONG_IDLE_TIMEOUT_MS, settingsOpen)
+  // 30분 무조작 시 전체 화면 대기(디지털 액자) 모드로 전환 — 단, 기본(정보) 모드에서만
+  // 동작한다. 사진 모드는 이미 그 자체가 액자 역할(위 isIdle/IdleScreen)이라 여기서 또
+  // 다른 Idle 오버레이를 얹지 않는다: isPhotoMode도 suspend 조건에 포함시켜, 사진 모드에
+  // 있는 동안은 경과 시간을 아예 세지 않고(useLongIdleTimer 내부에서 suspend=true면
+  // 판정을 건너뜀) 대기 화면도 뜨지 않는다. 기본 모드에서 대기 화면이 뜬 뒤 터치하면
+  // 오버레이만 사라지고, 이미 기본 모드였으므로 자연히 기본 정보화면으로 복귀한다.
+  const isLongIdle = useLongIdleTimer(LONG_IDLE_TIMEOUT_MS, settingsOpen || isPhotoMode)
 
   return (
     <div className={`app ${isPhotoMode ? 'is-photo-mode' : ''}`}>
@@ -68,24 +87,29 @@ function App() {
       {/* 사진 모드일 때만 마운트한다. 사진+시계 화면 자체가 사진 모드의 기본(대기) 화면이다. */}
       {isPhotoMode && (
         <div className="idle-layer">
-          <IdleScreen photos={photos} active={isIdle} />
+          <IdleScreen photos={activePhotos} active={isIdle} />
         </div>
       )}
 
-      {/* 항상 마운트해 두고 opacity로만 나타나고 사라진다(기존 idle-layer와 동일한 방식) —
-          기본/사진 모드 어느 화면이든 최상단에서 덮는다. */}
-      <div className="screensaver-layer">
-        <ScreenSaver photos={photos} active={isLongIdle} />
-      </div>
+      {/* 기본 모드일 때만 마운트한다(사진 모드는 이미 액자 화면이라 이 오버레이가 필요 없음).
+          마운트돼 있는 동안은 opacity로만 나타나고 사라진다(기존 idle-layer와 동일한 방식). */}
+      {!isPhotoMode && (
+        <div className="screensaver-layer">
+          <ScreenSaver photos={activePhotos} active={isLongIdle} />
+        </div>
+      )}
 
       {settingsOpen && (
         <PhotoManager
           photos={photos}
           processing={processing}
+          progress={progress}
           error={error}
           onAddPhotos={addPhotos}
           onRemovePhoto={removePhoto}
           onClearPhotos={clearPhotos}
+          onSetPhotoActive={setPhotoActive}
+          onSetAllPhotosActive={setAllPhotosActive}
           onClose={() => setSettingsOpen(false)}
         />
       )}

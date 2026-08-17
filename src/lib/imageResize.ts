@@ -6,14 +6,20 @@
 const MAX_DIMENSION = 2048
 const JPEG_QUALITY = 0.82
 
-export function resizeImageFile(file: File): Promise<Blob> {
+// 사진 관리 화면(그리드)에서만 쓰는 작은 미리보기용 썸네일. 액자에 실제로 쓰는 이미지
+// (위 MAX_DIMENSION, 2048px)를 그리드에 수십 장 그대로 띄우면 구형 iPad에서 메모리
+// 부담이 크므로, 훨씬 작은 사본을 하나 더 만들어 별도로 저장해둔다.
+const THUMBNAIL_MAX_DIMENSION = 320
+const THUMBNAIL_JPEG_QUALITY = 0.7
+
+function resizeToBlob(source: File | Blob, maxDimension: number, quality: number): Promise<Blob> {
   return new Promise((resolve, reject) => {
-    const objectUrl = URL.createObjectURL(file)
+    const objectUrl = URL.createObjectURL(source)
     const img = new Image()
 
     img.onload = () => {
       const { width, height } = img
-      const scale = Math.min(1, MAX_DIMENSION / Math.max(width, height))
+      const scale = Math.min(1, maxDimension / Math.max(width, height))
       const targetWidth = Math.round(width * scale)
       const targetHeight = Math.round(height * scale)
 
@@ -40,7 +46,7 @@ export function resizeImageFile(file: File): Promise<Blob> {
           }
         },
         'image/jpeg',
-        JPEG_QUALITY,
+        quality,
       )
     }
 
@@ -51,4 +57,14 @@ export function resizeImageFile(file: File): Promise<Blob> {
 
     img.src = objectUrl
   })
+}
+
+export function resizeImageFile(file: File): Promise<Blob> {
+  return resizeToBlob(file, MAX_DIMENSION, JPEG_QUALITY)
+}
+
+// 썸네일은 원본 File이 아니라 이미 리사이즈된 메인 이미지(resizeImageFile의 결과)를
+// 입력으로 받는 걸 전제로 한다 — 큰 원본 파일을 두 번 디코딩하지 않기 위한 성능 최적화.
+export function createThumbnail(resizedBlob: Blob): Promise<Blob> {
+  return resizeToBlob(resizedBlob, THUMBNAIL_MAX_DIMENSION, THUMBNAIL_JPEG_QUALITY)
 }

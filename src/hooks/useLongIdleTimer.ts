@@ -7,8 +7,9 @@ const ACTIVITY_EVENTS = ['pointerdown', 'touchstart', 'keydown'] as const
 
 const STORAGE_KEY = 'deskpad:last-interaction-at'
 
-// 기본/사진 모드 어느 쪽이든 30분 동안 조작이 없으면 전체 화면 대기(디지털 액자) 모드로
-// 전환하기까지 기다리는 시간(ms).
+// 기본(정보) 모드에서 30분 동안 조작이 없으면 전체 화면 대기(디지털 액자) 모드로
+// 전환하기까지 기다리는 시간(ms). 사진 모드는 이미 그 자체가 액자 역할이라 호출하는 쪽
+// (App.tsx)에서 isPhotoMode를 suspend 조건에 포함시켜 이 훅이 아예 카운트하지 않게 한다.
 export const LONG_IDLE_TIMEOUT_MS = 30 * 60 * 1000
 
 // 15초마다 경과 시간을 다시 계산한다. setTimeout 하나로 30분을 예약하는 대신 짧은 주기로
@@ -29,7 +30,8 @@ function writeLastInteractionAt(value: number) {
   window.localStorage.setItem(STORAGE_KEY, String(value))
 }
 
-// suspend(설정 모달이 열려 있는 동안 등)가 true인 동안은 대기 화면으로 전환하지 않는다.
+// suspend(설정 모달이 열려 있는 동안, 또는 이미 사진 모드라 이 대기 화면이 필요 없는 동안 등)가
+// true인 동안은 경과 시간을 세지 않고 대기 화면으로 전환하지 않는다.
 export function useLongIdleTimer(timeoutMs: number, suspend: boolean): boolean {
   const lastInteractionRef = useRef<number>(readLastInteractionAt())
   const [isLongIdle, setIsLongIdle] = useState<boolean>(

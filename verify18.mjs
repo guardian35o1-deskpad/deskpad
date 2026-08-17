@@ -196,7 +196,8 @@ async function main() {
     await context.close()
   }
 
-  // ---- 6) [경로 B, 가상 시계] 사진 모드에서 켜 둔 채로 30분 경과 → 대기 → 터치 해제해도 viewMode 유지 ----
+  // ---- 6) [경로 B, 가상 시계] 사진 모드는 이미 액자 화면이므로 30분이 지나도
+  //     스크린세이버 오버레이를 추가로 띄우지 않는다(최신 규칙: 30분 Idle은 기본 모드 전용). ----
   {
     const context = await browser.newContext({ viewport: { width: 2048, height: 1536 } })
     const page = await context.newPage()
@@ -208,18 +209,64 @@ async function main() {
     await page.waitForTimeout(100)
     const modeBefore = await page.evaluate(() => window.localStorage.getItem('deskpad:view-mode'))
 
-    await page.clock.runFor(31 * 60 * 1000)
-    const idleShown = await page.evaluate(() => !!document.querySelector('.screensaver.is-visible'))
-
-    await page.evaluate(() => window.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })))
-    await page.waitForTimeout(200)
-    const idleHiddenAfterTap = await page.evaluate(() => !document.querySelector('.screensaver.is-visible'))
+    await page.clock.runFor(45 * 60 * 1000)
+    const screensaverNotShown = await page.evaluate(() => !document.querySelector('.screensaver.is-visible'))
+    // 사진 모드 자체의 기존 "탭→30초간 Dashboard→자동 복귀" 동작(15번)은 이번 변경과
+    // 무관하게 그대로 살아있어야 한다 — idle-layer(사진 모드 전용)는 여전히 존재.
+    const photoModeIdleLayerPresent = await page.evaluate(() => !!document.querySelector('.idle-layer'))
     const modeAfter = await page.evaluate(() => window.localStorage.getItem('deskpad:view-mode'))
 
     check('6) 사진 모드로 전환됨(전제 조건)', modeBefore === 'photo')
-    check('6) 사진 모드에서도 켜 둔 채로 30분(가상) 지나면 스크린세이버 표시', idleShown)
-    check('6) 터치하면 스크린세이버만 사라짐', idleHiddenAfterTap)
-    check('6) 스크린세이버 해제 후에도 viewMode="photo" 그대로 유지(도크 버튼으로만 변경)', modeAfter === 'photo')
+    check(
+      '6) 사진 모드에서는 45분(가상)이 지나도 30분 스크린세이버가 뜨지 않음(이미 액자라 불필요)',
+      screensaverNotShown,
+    )
+    check('6) 사진 모드 전용 idle-layer(15번, 탭-리빌 30초 타이머)는 그대로 존재', photoModeIdleLayerPresent)
+    check('6) viewMode="photo" 그대로 유지', modeAfter === 'photo')
+
+    await context.close()
+  }
+
+  // ---- 7) [경로 B, 가상 시계] 사진 모드에서 오래 있다가 기본 모드로 전환 → 그 시점부터
+  //     새로 30분을 세고, 지나면 정상적으로 스크린세이버 표시 ----
+  {
+    const context = await browser.newContext({ viewport: { width: 2048, height: 1536 } })
+    const page = await context.newPage()
+    await page.clock.install({ time: Date.now() })
+    await page.goto(BASE_URL)
+    await page.waitForTimeout(200)
+
+    await page.click('.dock-btn:has-text("사진")')
+    await page.waitForTimeout(100)
+    await page.clock.runFor(45 * 60 * 1000) // 사진 모드에서 오래 방치(카운트되지 않아야 함)
+
+    // 45분 방치로 사진 모드 자체의 idle-screen(15번, 탭-리빌 30초 타이머)이 사진+시계 화면을
+    // 덮고 있어 도크 버튼을 가리므로, 먼저 터치해 정보 Dashboard를 잠깐 띄운 뒤 버튼을 누른다
+    // (실기기에서도 동일한 순서로만 도크에 접근 가능).
+    await page.evaluate(() => window.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })))
+    await page.waitForTimeout(200)
+
+    // 기본 모드로 전환하는 클릭 자체가 조작이므로, 그 시점부터 30분을 다시 센다.
+    await page.click('.dock-btn:has-text("기본")')
+    await page.waitForTimeout(100)
+    const shownRightAfterSwitch = await page.evaluate(
+      () => !document.querySelector('.screensaver.is-visible'),
+    )
+
+    await page.clock.runFor(31 * 60 * 1000)
+    const shownAfter31MinInDefault = await page.evaluate(
+      () => !!document.querySelector('.screensaver.is-visible'),
+    )
+
+    await page.evaluate(() => window.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })))
+    await page.waitForTimeout(200)
+    const hiddenAfterTap = await page.evaluate(() => !document.querySelector('.screensaver.is-visible'))
+    const modeAfterTap = await page.evaluate(() => window.localStorage.getItem('deskpad:view-mode'))
+
+    check('7) 기본 모드로 전환한 직후엔 스크린세이버가 뜨지 않음(전환 자체가 조작으로 인정)', shownRightAfterSwitch)
+    check('7) 기본 모드에서 다시 30분(가상) 지나면 정상적으로 스크린세이버 표시', shownAfter31MinInDefault)
+    check('7) 터치하면 사라지고, 이미 기본 모드였으므로 자연히 기본 정보화면으로 복귀', hiddenAfterTap)
+    check('7) viewMode="default" 그대로 유지(도크 버튼으로만 변경되는 원칙 유지)', modeAfterTap === 'default')
 
     await context.close()
   }

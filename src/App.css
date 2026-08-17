@@ -966,36 +966,106 @@
   margin-bottom: 1.5vh;
 }
 
-.photo-manager-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 1vh;
+.photo-manager-progress {
+  font-size: 1.4vw;
+  color: #8b8fa3;
+  margin-bottom: 1.5vh;
 }
 
-.photo-manager-item {
+/* 사진첩 그리드 — "체크된 사진만 액자에 표시" 개념을 텍스트 목록 대신 썸네일 격자로 보여준다.
+   원본/2048px 액자용 이미지가 아니라 각 사진의 작은 썸네일(photo.thumbnail)만 그려서
+   수십 장이 있어도 구형 iPad에서 메모리 부담이 크지 않게 한다. */
+.photo-manager-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 1.2vw;
+  padding: 0.4vh 0.2vw;
+}
+
+.photo-manager-cell {
+  position: relative;
+  aspect-ratio: 1 / 1;
+}
+
+.photo-manager-thumb {
+  width: 100%;
+  height: 100%;
+  border: 1px solid #232733;
+  border-radius: 10px;
+  background-color: #171a22;
+  background-size: cover;
+  background-position: center center;
+  cursor: pointer;
+  padding: 0;
+  transition: opacity 0.2s ease;
+}
+
+/* 체크 해제된(액자에서 제외된) 사진은 썸네일을 살짝 어둡게 해 한눈에 구분한다 —
+   사진 자체는 그대로 보관되므로 완전히 숨기거나 흐리게 처리하지는 않는다. */
+.photo-manager-cell.is-inactive .photo-manager-thumb {
+  opacity: 0.4;
+}
+
+.photo-manager-check {
+  position: absolute;
+  top: 0.5vh;
+  right: 0.5vw;
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.7);
+  background-color: rgba(5, 6, 10, 0.55);
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  font-size: 1.6vw;
-  background-color: #171a22;
-  border: 1px solid #232733;
-  border-radius: 8px;
-  padding: 1vh 1.4vw;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
 }
 
-.photo-manager-item-delete {
-  font-family: inherit;
-  font-size: 1.3vw;
+.photo-manager-check.is-active {
+  background-color: #34c759;
+  border-color: #34c759;
+}
+
+.photo-manager-trash {
+  position: absolute;
+  bottom: 0.5vh;
+  right: 0.5vw;
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background-color: rgba(5, 6, 10, 0.55);
   color: #ffb4b4;
-  background-color: transparent;
-  border: 1px solid #5a2a2a;
-  border-radius: 6px;
-  padding: 0.5vh 1vw;
+  font-size: 13px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
+  padding: 0;
+}
+
+.photo-manager-hint {
+  font-size: 1.3vw;
+  color: #8b8fa3;
+  margin-top: 1.5vh;
+  text-align: center;
+}
+
+.photo-manager-footer {
+  display: flex;
+  justify-content: center;
+  margin-top: 1.2vh;
 }
 
 .photo-manager-empty {
@@ -1005,4 +1075,38 @@
 
 .photo-manager-file-input {
   display: none;
+}
+
+/* 사진 그리드에서 사진 본체를 누르면 뜨는 큰 미리보기(원본 액자용 이미지 사용, contain으로
+   잘리지 않게). 체크박스/삭제 버튼과 완전히 분리된 별도 조작이라 실수로 상태가 바뀌지 않는다. */
+.photo-preview-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 11;
+  background-color: rgba(0, 0, 0, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.photo-preview-image {
+  max-width: 90vw;
+  max-height: 85vh;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.photo-preview-close {
+  position: absolute;
+  top: max(2vh, env(safe-area-inset-top, 0px) + 1.5vh);
+  right: max(2vw, env(safe-area-inset-right, 0px) + 1.5vw);
+  font-family: inherit;
+  font-size: 1.5vw;
+  font-weight: 600;
+  color: #ffffff;
+  background-color: rgba(35, 39, 51, 0.9);
+  border: 1px solid #3a3f4e;
+  border-radius: 8px;
+  padding: 0.8vh 1.4vw;
+  cursor: pointer;
 }
