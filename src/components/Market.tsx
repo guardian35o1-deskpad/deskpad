@@ -28,12 +28,25 @@ function buildSparklinePoints(history: number[]): string {
     .join(' ')
 }
 
+// updatedAt은 실제 시장 데이터의 시각(모르면 null)이지 화면을 그린 시각이 아니다 — 그래서
+// 오늘 날짜면 기존처럼 "HH:mm 기준"만 보여주지만, 다른 날짜(예: 휴장일이라 최신 데이터가
+// 며칠 전 종가인 경우)면 날짜까지 함께 보여줘 "방금 갱신됨"처럼 오해하지 않게 한다.
+// 시각을 아예 모르면(소스가 안 주거나 파싱 실패) 시각을 지어내지 않고 그 사실을 그대로 알린다.
 function formatUpdatedAt(iso: string | null): string {
-  if (!iso) return ''
+  if (!iso) return '기준 시각 확인 안 됨'
   const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return '기준 시각 확인 안 됨'
+
+  const now = new Date()
+  const isToday =
+    date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate()
   const hh = date.getHours().toString().padStart(2, '0')
   const mm = date.getMinutes().toString().padStart(2, '0')
-  return `${hh}:${mm} 기준`
+  if (isToday) return `${hh}:${mm} 기준`
+
+  const mo = (date.getMonth() + 1).toString().padStart(2, '0')
+  const dd = date.getDate().toString().padStart(2, '0')
+  return `${mo}.${dd} ${hh}:${mm} 기준`
 }
 
 function MarketItem({ quote }: { quote: MarketQuote }) {

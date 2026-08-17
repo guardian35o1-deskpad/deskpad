@@ -15,7 +15,7 @@ interface MarketCache {
   version: number
   source: CacheSource
   quotes: MarketQuote[]
-  updatedAt: string
+  updatedAt: string | null
 }
 
 function currentSource(): CacheSource {
@@ -32,7 +32,8 @@ export function readMarketCache(): MarketCache | null {
     if (!raw) return null
     const parsed = JSON.parse(raw) as Partial<MarketCache>
     if (parsed.version !== CACHE_VERSION || parsed.source !== currentSource()) return null
-    if (!Array.isArray(parsed.quotes) || typeof parsed.updatedAt !== 'string') return null
+    if (!Array.isArray(parsed.quotes)) return null
+    if (parsed.updatedAt !== null && typeof parsed.updatedAt !== 'string') return null
     return parsed as MarketCache
   } catch (err) {
     console.error('시장 데이터 캐시를 읽지 못했습니다.', err)
@@ -40,7 +41,7 @@ export function readMarketCache(): MarketCache | null {
   }
 }
 
-function writeMarketCache(quotes: MarketQuote[], updatedAt: string) {
+function writeMarketCache(quotes: MarketQuote[], updatedAt: string | null) {
   try {
     const cache: MarketCache = { version: CACHE_VERSION, source: currentSource(), quotes, updatedAt }
     window.localStorage.setItem(CACHE_KEY, JSON.stringify(cache))
@@ -51,19 +52,22 @@ function writeMarketCache(quotes: MarketQuote[], updatedAt: string) {
 
 export interface MarketFetchResult {
   quotes: MarketQuote[]
-  updatedAt: string
+  updatedAt: string | null
   stale: boolean
 }
 
-// 화면의 "OO:OO 기준"은 가능하면 앱이 fetch를 마친 시각이 아니라 실제 시장 데이터 자체의
-// updatedAt(예: Yahoo의 regularMarketTime)을 우선 쓴다 — 여러 지수 중 가장 최근 값을 쓰고,
-// 하나도 실제 시각을 안 주면(예: Naver 응답에 시각이 없어 서버 응답 시각으로 대체된 경우)
-// 이 함수를 호출한 시점(fetch 성공 시각)으로 대체한다.
-function pickDisplayUpdatedAt(quotes: MarketQuote[]): string {
+// 화면의 "OO:OO 기준"은 앱이 fetch를 마친 시각이 아니라 실제 시장 데이터 자체의 updatedAt
+// (예: Yahoo의 regularMarketTime, 또는 Naver가 준 실제 거래 시각)만 쓴다 — 여러 지수 중
+// 가장 최근 값을 고르고, 단 하나도 실제 시각을 모르면(예: Naver가 시각을 안 주고 Yahoo도
+// 실패한 경우) null을 돌려준다. 예전에는 여기서 이 함수를 호출한 시점(fetch 성공 시각)으로
+// 대체했는데, 그러면 며칠 전 종가 데이터에도 "방금 갱신됨"처럼 보이는 오해를 낳았다(휴장일에
+// "18:42 기준"으로 보이던 문제) — 모르면 모른다고 하는 게 낫다는 원칙에 따라 null을 그대로
+// 둔다. null일 때 화면에 어떻게 보일지는 Market.tsx의 formatUpdatedAt()이 결정한다.
+function pickDisplayUpdatedAt(quotes: MarketQuote[]): string | null {
   const timestamps = quotes
     .map((quote) => quote.updatedAt)
     .filter((value): value is string => typeof value === 'string' && !Number.isNaN(Date.parse(value)))
-  if (timestamps.length === 0) return new Date().toISOString()
+  if (timestamps.length === 0) return null
   return timestamps.reduce((latest, current) => (Date.parse(current) > Date.parse(latest) ? current : latest))
 }
 

@@ -102,11 +102,40 @@ export function parseYahooChartResult(result: YahooChartResult | undefined): Par
   }
 }
 
+// Naver가 실제 거래 시각을 어떤 필드/형식으로 주는지 raw 캡처로 확정하지 못했다(market.ts
+// 상단 주석 참고) — 그래서 여러 후보 필드명 + 두 가지 형식(ISO 비슷한 문자열 / 콤팩트 숫자
+// YYYYMMDDHHmmss)을 시도하는 최선-노력(best-effort) 파서로만 둔다. 못 찾거나 파싱이 안 되면
+// null을 돌려주고(예외를 던지지 않음) — "값을 지어내지 않는다"는 원칙상, 시각을 모르면 그냥
+// 모른다고 하는 게 맞고 fetch 시각 등으로 대체하지 않는다(marketService.ts가 이 null을 보고
+// "기준 시각 확인 안 됨"으로 정직하게 표시함).
+function parseNaverTimestamp(raw: unknown): string | null {
+  if (typeof raw !== 'string' && typeof raw !== 'number') return null
+  const str = String(raw).trim()
+  if (!str) return null
+
+  const direct = Date.parse(str)
+  if (!Number.isNaN(direct)) return new Date(direct).toISOString()
+
+  // 콤팩트 숫자 형식(YYYYMMDDHHmmss)도 Naver 계열 API에서 관찰된 적 있어 방어적으로 지원.
+  // 한국시간(KST, UTC+9) 기준이라고 가정한다 — 이 가정 자체는 확인되지 않았으므로 틀릴 수
+  // 있다(그래도 완전히 틀린 임의값보다는 낫다는 판단, 필요하면 나중에 조정).
+  const compact = str.match(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})$/)
+  if (compact) {
+    const [, y, mo, d, h, mi, s] = compact
+    const parsed = Date.parse(`${y}-${mo}-${d}T${h}:${mi}:${s}+09:00`)
+    if (!Number.isNaN(parsed)) return new Date(parsed).toISOString()
+  }
+
+  return null
+}
+
 export interface ParsedNaver {
   value: number
   change: number | null
   changePercent: number | null
   marketStatus: string | null
+  // 이 지수 값의 실제 거래/집계 시각. 위 parseNaverTimestamp 참고 — 확인 못 하면 null.
+  tradedAt: string | null
 }
 
 // item을 못 찾거나 현재값 필드를 못 찾으면 예외를 던진다(호출부에서 잡아서 ok:false로 처리).
@@ -125,6 +154,7 @@ export function parseNaverItem(data: unknown, code: string): ParsedNaver {
   const changePercent = toNumber(pickField(item, ['fluctuationsRatio', 'changeRate', 'prevChangeRate', 'cr']))
   const marketStatusRaw = pickField(item, ['marketStatus', 'ms'])
   const marketStatus = typeof marketStatusRaw === 'string' ? marketStatusRaw : null
+  const tradedAt = parseNaverTimestamp(pickField(item, ['localTradedAt', 'tradeTime', 'time', 'datetime', 'localDate']))
 
-  return { value, change, changePercent, marketStatus }
+  return { value, change, changePercent, marketStatus, tradedAt }
 }

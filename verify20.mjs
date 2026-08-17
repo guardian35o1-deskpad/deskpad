@@ -277,6 +277,51 @@ async function main() {
     await context.close()
   }
 
+  // ---- 15~16) "18:42 기준" 오해 문제 재현: 휴장일 등 며칠 전 종가만 있을 때 날짜까지 표시,
+  // 실제 시각을 아예 모르면 시각을 지어내지 않고 그 사실을 표시 ----
+  {
+    const context = await browser.newContext({ viewport: { width: 2048, height: 1536 } })
+    const page = await context.newPage()
+    await page.clock.install({ time: new Date(MARKET_OPEN_TIME) }) // "오늘" = 2026-08-17
+    await routeMarket(page, () =>
+      marketPayload({
+        quotes: marketPayload().quotes.map((q) => ({ ...q, updatedAt: '2026-08-14T06:30:00.000Z' })),
+      }),
+    )
+    await page.goto(BASE_URL)
+    await page.waitForSelector('.market-item')
+    await page.waitForTimeout(300)
+
+    const updatedText = await page.evaluate(() => document.querySelector('.market-updated')?.textContent)
+    check(
+      '15) 오늘이 아닌 날짜의 실제 데이터 시각이면 "OO:OO 기준"이 아니라 날짜까지 함께 표시(휴장일 종가를 방금 갱신된 것처럼 오해하지 않게)',
+      updatedText === '08.14 06:30 기준',
+      updatedText,
+    )
+
+    await context.close()
+  }
+
+  {
+    const context = await browser.newContext({ viewport: { width: 2048, height: 1536 } })
+    const page = await context.newPage()
+    await routeMarket(page, () =>
+      marketPayload({ quotes: marketPayload().quotes.map((q) => ({ ...q, updatedAt: null })) }),
+    )
+    await page.goto(BASE_URL)
+    await page.waitForSelector('.market-item')
+    await page.waitForTimeout(300)
+
+    const updatedText = await page.evaluate(() => document.querySelector('.market-updated')?.textContent)
+    check(
+      '16) 실제 시장 데이터 시각을 하나도 모르면(소스가 안 줌) fetch 시각으로 대체하지 않고 "기준 시각 확인 안 됨"으로 정직하게 표시',
+      updatedText === '기준 시각 확인 안 됨',
+      updatedText,
+    )
+
+    await context.close()
+  }
+
   console.log(JSON.stringify(results, null, 2))
   await browser.close()
   const failed = results.filter((r) => !r.ok)

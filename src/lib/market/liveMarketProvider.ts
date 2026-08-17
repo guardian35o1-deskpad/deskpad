@@ -52,7 +52,11 @@ export const liveMarketProvider: MarketProvider = {
           change,
           changePercent,
           history: quote.history,
-          updatedAt: quote.updatedAt ?? data.updatedAt,
+          // quote.updatedAt은 이 지수 값 자체의 실제 시장 데이터 시각(모르면 null) — 여기서
+          // data.updatedAt(서버가 이 응답을 만든 시각, 즉 사실상 fetch 시각)으로 대체하지
+          // 않는다. 예전에는 이 fallback 때문에 Naver처럼 실제 시각을 안 주는 소스가 항상
+          // "방금 조회함"처럼 보여서, 휴장일 종가 데이터에도 "18:42 기준" 같은 오해를 낳았다.
+          updatedAt: quote.updatedAt,
         }
         return mapped
       })

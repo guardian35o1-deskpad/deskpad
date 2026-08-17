@@ -46,6 +46,7 @@ const naverNewShape = {
     parsed.value === 2650.32 && parsed.change === 11.07 && parsed.changePercent === 0.42 && parsed.marketStatus === 'OPEN',
     parsed,
   )
+  check('신세대 스키마에 시각 필드가 없으면 tradedAt은 시각을 지어내지 않고 null', parsed.tradedAt === null, parsed.tradedAt)
 }
 
 // ---- findNaverItem: 구세대 짧은 필드명(nv/cv/cr/ms) 스키마 ----
@@ -59,6 +60,35 @@ const naverOldShape = [
     parsed.value === 2650.32 && parsed.change === 11.07 && parsed.changePercent === 0.42 && parsed.marketStatus === 'CLOSE',
     parsed,
   )
+}
+
+// ---- parseNaverItem: 실제 거래 시각(tradedAt) 추출 — ISO 비슷한 문자열 형식 ----
+{
+  const parsed = parseNaverItem(
+    { datas: [{ itemCode: 'KOSPI', closePrice: 2650.32, localTradedAt: '2026-08-14T15:30:00+09:00' }] },
+    'KOSPI',
+  )
+  check(
+    'localTradedAt(ISO 형식)이 있으면 tradedAt으로 파싱됨',
+    parsed.tradedAt === new Date('2026-08-14T15:30:00+09:00').toISOString(),
+    parsed.tradedAt,
+  )
+}
+
+// ---- parseNaverItem: 실제 거래 시각(tradedAt) 추출 — 콤팩트 숫자(YYYYMMDDHHmmss) 형식 ----
+{
+  const parsed = parseNaverItem({ datas: [{ itemCode: 'KOSPI', closePrice: 2650.32, time: '20260814153000' }] }, 'KOSPI')
+  check(
+    'time(콤팩트 숫자 형식)이 있으면 KST 기준으로 해석해 tradedAt으로 파싱됨',
+    parsed.tradedAt === new Date('2026-08-14T15:30:00+09:00').toISOString(),
+    parsed.tradedAt,
+  )
+}
+
+// ---- parseNaverItem: 시각 필드가 파싱 불가능한 값이면 지어내지 않고 null ----
+{
+  const parsed = parseNaverItem({ datas: [{ itemCode: 'KOSPI', closePrice: 2650.32, localTradedAt: 'not-a-real-date' }] }, 'KOSPI')
+  check('시각 필드 값이 파싱 불가능하면 tradedAt은 null(지어내지 않음)', parsed.tradedAt === null, parsed.tradedAt)
 }
 
 // ---- findNaverItem: 완전히 모르는 필드명이면 명확히 실패해야 함(값을 지어내지 않음) ----
