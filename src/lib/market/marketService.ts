@@ -77,12 +77,17 @@ function pickDisplayUpdatedAt(quotes: MarketQuote[]): string | null {
 // 그렇지 않으면(앱 최초 실행, 또는 mock→live 전환 직후라 캐시가 버려진 경우) 마침 이 순간
 // 장이 닫혀 있으면 /api/market을 한 번도 호출하지 않고 "데이터 없음"에 머무르게 된다 —
 // 최초 1회는 장 상태와 무관하게 반드시 호출해 각 지수의 최신 종가를 확보한다.
-export async function fetchMarketQuotes(): Promise<MarketFetchResult> {
+//
+// force=true(사용자가 도크의 ↻ 버튼을 직접 눌렀을 때)는 위 "장이 전부 닫혀 있으면 캐시를
+// 그대로 쓴다" 최적화 자체를 건너뛰고 무조건 /api/market을 다시 호출한다 — 수동 새로고침은
+// "지금 가능한 가장 최신 값"을 보장해야 하기 때문. 휴장 중이어도 Naver/Yahoo는 마지막
+// 거래일 종가를 그대로 돌려주므로(37번), 강제 조회해도 잘못된 값으로 덮어써지는 일은 없다.
+export async function fetchMarketQuotes(force = false): Promise<MarketFetchResult> {
   const cache = readMarketCache()
 
   const openSymbols = WATCHED_INDICES.filter((item) => isMarketOpen(item.exchange)).map((item) => item.symbol)
 
-  if (openSymbols.length === 0 && cache) {
+  if (!force && openSymbols.length === 0 && cache) {
     return { quotes: cache.quotes, updatedAt: cache.updatedAt, stale: true }
   }
 

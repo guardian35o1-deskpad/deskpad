@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Clock from './components/Clock'
 import Calendar from './components/Calendar'
 import Weather from './components/Weather'
@@ -12,7 +12,13 @@ import { usePhotos } from './hooks/usePhotos'
 import { useIdleTimer } from './hooks/useIdleTimer'
 import { useDashboardRevealTimeout } from './hooks/useDashboardRevealTimeout'
 import { useLongIdleTimer, LONG_IDLE_TIMEOUT_MS } from './hooks/useLongIdleTimer'
+import { useWeather } from './hooks/useWeather'
+import { useCalendarEvents } from './hooks/useCalendarEvents'
+import { useMarket } from './hooks/useMarket'
 import './App.css'
+
+// 수동 새로고침(도크 ↻) 완료 후 "방금 갱신됨" 체크 아이콘을 잠깐 보여주는 시간.
+const REFRESH_DONE_BADGE_MS = 1500
 
 function App() {
   // 저장된 화면 모드(기본/사진, localStorage)와 사진 모드 안에서 Dashboard를 잠깐 보여주는
@@ -47,6 +53,42 @@ function App() {
   const isIdle = useIdleTimer(isPhotoMode, dashboardRevealTimeoutMs, settingsOpen)
   const dashboardHidden = isPhotoMode && isIdle
 
+  // 외부 데이터 3종(날씨/캘린더/시장) — 각 훅이 자체적으로 자동 갱신(주기/visibilitychange/
+  // focus)을 갖고 있는 것은 그대로다. 여기서 App.tsx가 직접 호출하는 이유는 오직 하나 —
+  // 아래 refreshAll()이 도크의 ↻ 버튼 한 번으로 세 소스를 동시에 새로고침하려면, 그 refresh
+  // 함수들을 한 곳에서 쥐고 있어야 하기 때문(공통 refresh 함수 설계, 중복 fetch 로직 없음).
+  const weather = useWeather()
+  const calendar = useCalendarEvents(dashboardHidden)
+  const market = useMarket()
+
+  const [isRefreshingAll, setIsRefreshingAll] = useState(false)
+  const [justRefreshed, setJustRefreshed] = useState(false)
+  const refreshLockRef = useRef(false)
+  const refreshDoneTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // 도크의 ↻ 버튼 핸들러. 세 소스를 병렬로 강제 새로고침한다 — Promise.allSettled를 써서
+  // 하나가 실패해도(예: Calendar API 오류) 나머지는 정상적으로 갱신되고 전체를 실패로 처리하지
+  // 않는다(요구사항). 연속 클릭은 refreshLockRef + 버튼 disabled로 이중 방지한다.
+  const refreshAll = useCallback(async () => {
+    if (refreshLockRef.current) return
+    refreshLockRef.current = true
+    setIsRefreshingAll(true)
+    if (refreshDoneTimerRef.current) clearTimeout(refreshDoneTimerRef.current)
+
+    await Promise.allSettled([weather.refresh(true), calendar.refresh(), market.refresh(true)])
+
+    setIsRefreshingAll(false)
+    setJustRefreshed(true)
+    refreshDoneTimerRef.current = setTimeout(() => setJustRefreshed(false), REFRESH_DONE_BADGE_MS)
+    refreshLockRef.current = false
+  }, [weather.refresh, calendar.refresh, market.refresh])
+
+  useEffect(() => {
+    return () => {
+      if (refreshDoneTimerRef.current) clearTimeout(refreshDoneTimerRef.current)
+    }
+  }, [])
+
   // 30분 무조작 시 전체 화면 대기(디지털 액자) 모드로 전환 — 단, 기본(정보) 모드에서만
   // 동작한다. 사진 모드는 이미 그 자체가 액자 역할(위 isIdle/IdleScreen)이라 여기서 또
   // 다른 Idle 오버레이를 얹지 않는다: isPhotoMode도 suspend 조건에 포함시켜, 사진 모드에
@@ -71,16 +113,29 @@ function App() {
       <div className={`app-content ${dashboardHidden ? 'is-idle' : ''}`}>
         <header className="app-header-row">
           <Clock />
-          <Weather />
+          <Weather data={weather.data} hasError={weather.hasError} />
         </header>
 
         <main className="app-main">
-          <Calendar dashboardHidden={dashboardHidden} />
+          <Calendar events={calendar.events} status={calendar.status} />
         </main>
 
         <footer className="app-footer">
-          <Market />
-          <ViewToggle mode={mode} onChange={setMode} onOpenSettings={() => setSettingsOpen(true)} />
+          <Market
+            quotes={market.quotes}
+            updatedAt={market.updatedAt}
+            loading={market.loading}
+            error={market.error}
+            isMock={market.isMock}
+          />
+          <ViewToggle
+            mode={mode}
+            onChange={setMode}
+            onOpenSettings={() => setSettingsOpen(true)}
+            onRefresh={refreshAll}
+            isRefreshing={isRefreshingAll}
+            justRefreshed={justRefreshed}
+          />
         </footer>
       </div>
 

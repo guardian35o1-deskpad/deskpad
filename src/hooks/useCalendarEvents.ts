@@ -126,5 +126,8 @@ export function useCalendarEvents(dashboardHidden: boolean) {
     }
   }, [dashboardHidden, fetchEvents])
 
-  return { events, status }
+  // 수동 새로고침(도크 ↻ 버튼)에서 쓴다 — fetchEvents 자체가 이미 "진행 중인 요청이 있으면
+  // 무시"만 할 뿐 마지막 조회 이후 경과 시간은 따지지 않으므로, 그대로 넘겨주면 항상 즉시
+  // 재조회하는 "강제 새로고침"으로 쓸 수 있다.
+  return { events, status, refresh: fetchEvents }
 }

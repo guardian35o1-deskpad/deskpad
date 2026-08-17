@@ -298,6 +298,61 @@
   cursor: pointer;
 }
 
+/* 월 헤더(이전/오늘/다음 버튼)를 제외한 스와이프 판정 대상 — useSwipeNav가 이 div에 한 번만
+   이벤트 리스너를 붙이므로 이 div 자체는 절대 리마운트되지 않는다(월이 바뀌어도 그대로 유지).
+   touch-action: pan-y로 세로 스크롤은 브라우저 기본 동작에 맡기고 가로 이동만 이 컴포넌트가
+   판정하게 한다. 실제 flex column 레이아웃(weekday-row/cells)은 안쪽 .calendar-swipe-inner가
+   갖는다. */
+.calendar-swipe-area {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  touch-action: pan-y;
+}
+
+/* 월이 바뀔 때마다 key로 리마운트되는 안쪽 래퍼 — 슬라이드 애니메이션은 여기서만 재생된다.
+   기존에 .calendar-grid-area가 직접 갖고 있던 flex column 레이아웃(weekday-row/cells 사이
+   gap 1vh)을 그대로 이어받는다. */
+.calendar-swipe-inner {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1vh;
+}
+
+@keyframes calendar-slide-next {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes calendar-slide-prev {
+  from {
+    transform: translateX(-24px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* 애니메이션 길이(220ms)는 Calendar.tsx의 MONTH_TRANSITION_LOCK_MS와 반드시 일치시킨다. */
+.calendar-swipe-inner.slide-next {
+  animation: calendar-slide-next 220ms ease;
+}
+
+.calendar-swipe-inner.slide-prev {
+  animation: calendar-slide-prev 220ms ease;
+}
+
 .calendar-weekday-row {
   flex: 0 0 auto;
   display: grid;
@@ -705,6 +760,28 @@
   color: #f5f6fa;
   background-color: rgba(255, 255, 255, 0.12);
   font-weight: 700;
+}
+
+.dock-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.dock-refresh-btn {
+  font-size: clamp(13px, 1.4vw, 22px);
+}
+
+@keyframes dock-refresh-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.dock-refresh-btn.is-spinning {
+  animation: dock-refresh-spin 0.8s linear infinite;
 }
 
 .dock-sep {

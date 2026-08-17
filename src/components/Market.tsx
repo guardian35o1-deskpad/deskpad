@@ -1,4 +1,3 @@
-import { useMarket } from '../hooks/useMarket'
 import type { MarketQuote } from '../lib/market/types'
 import { WATCHED_INDICES } from '../lib/market/types'
 
@@ -95,8 +94,16 @@ function MarketItemPlaceholder({ name }: { name: string }) {
   )
 }
 
-function Market() {
-  const { quotes, updatedAt, loading, error, isMock } = useMarket()
+interface MarketProps {
+  // useMarket()은 App.tsx에서 호출한다(Weather.tsx와 동일한 이유 — refreshAll() 공통화).
+  quotes: MarketQuote[]
+  updatedAt: string | null
+  loading: boolean
+  error: boolean
+  isMock: boolean
+}
+
+function Market({ quotes, updatedAt, loading, error, isMock }: MarketProps) {
   const quoteBySymbol = new Map(quotes.map((quote) => [quote.symbol, quote]))
   // 아직 한 번도 아무 값도 못 받아온 최초 로딩/전체 실패 상태에서는 기존처럼 안내 문구만 보여준다.
   // 하나라도 값이 있으면(부분 성공 포함) 4개 카드 자리를 항상 그대로 유지한다.

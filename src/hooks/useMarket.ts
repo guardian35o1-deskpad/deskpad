@@ -17,6 +17,9 @@ interface UseMarketResult {
   error: boolean
   // 지금 화면에 표시 중인 값이 실제 API가 아닌 샘플(mock) 데이터인지 여부.
   isMock: boolean
+  // 수동 새로고침(도크 ↻ 버튼)에서 쓴다. force=true면 "장 마감 시 캐시 재사용" 최적화를
+  // 건너뛰고 /api/market을 무조건 다시 호출한다(marketService.fetchMarketQuotes 참고).
+  refresh: (force?: boolean) => Promise<void>
 }
 
 // 자동 갱신 경로(useCalendarEvents.ts와 동일한 원칙):
@@ -38,13 +41,13 @@ export function useMarket(): UseMarketResult {
   const isMountedRef = useRef(true)
   const hasQuotesRef = useRef(quotes.length > 0)
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (force = false) => {
     if (isFetchingRef.current) return
     isFetchingRef.current = true
     lastFetchedAtRef.current = Date.now()
 
     try {
-      const result = await fetchMarketQuotes()
+      const result = await fetchMarketQuotes(force)
       if (!isMountedRef.current) return
       setQuotes(result.quotes)
       hasQuotesRef.current = result.quotes.length > 0
@@ -90,5 +93,5 @@ export function useMarket(): UseMarketResult {
     }
   }, [refresh])
 
-  return { quotes, updatedAt, stale, loading, error, isMock: activeMarketProvider.isMock }
+  return { quotes, updatedAt, stale, loading, error, isMock: activeMarketProvider.isMock, refresh }
 }
