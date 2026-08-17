@@ -6,10 +6,12 @@ import Market from './components/Market'
 import ViewToggle from './components/ViewToggle'
 import PhotoManager from './components/PhotoManager'
 import IdleScreen from './components/IdleScreen'
+import ScreenSaver from './components/ScreenSaver'
 import { useViewMode } from './hooks/useViewMode'
 import { usePhotos } from './hooks/usePhotos'
 import { useIdleTimer } from './hooks/useIdleTimer'
 import { useDashboardRevealTimeout } from './hooks/useDashboardRevealTimeout'
+import { useLongIdleTimer, LONG_IDLE_TIMEOUT_MS } from './hooks/useLongIdleTimer'
 import './App.css'
 
 function App() {
@@ -28,6 +30,11 @@ function App() {
   // 설정(사진 관리) 모달이 열려 있는 동안에는 자동으로 사진 화면으로 되돌아가지 않는다.
   const isIdle = useIdleTimer(isPhotoMode, dashboardRevealTimeoutMs, settingsOpen)
   const dashboardHidden = isPhotoMode && isIdle
+
+  // 기본/사진 모드와 무관하게, 30분 동안 조작이 없으면 전체 화면 대기(디지털 액자) 모드로
+  // 전환한다. 도크의 기본/사진 선택(mode)은 건드리지 않고 그 위에 오버레이로만 얹힌다 —
+  // 터치하면 오버레이만 사라지고 원래 보던 화면(기본/사진 모드 그대로)이 다시 보인다.
+  const isLongIdle = useLongIdleTimer(LONG_IDLE_TIMEOUT_MS, settingsOpen)
 
   return (
     <div className={`app ${isPhotoMode ? 'is-photo-mode' : ''}`}>
@@ -64,6 +71,12 @@ function App() {
           <IdleScreen photos={photos} active={isIdle} />
         </div>
       )}
+
+      {/* 항상 마운트해 두고 opacity로만 나타나고 사라진다(기존 idle-layer와 동일한 방식) —
+          기본/사진 모드 어느 화면이든 최상단에서 덮는다. */}
+      <div className="screensaver-layer">
+        <ScreenSaver photos={photos} active={isLongIdle} />
+      </div>
 
       {settingsOpen && (
         <PhotoManager
