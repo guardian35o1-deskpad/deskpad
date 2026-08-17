@@ -56,6 +56,23 @@ export interface MarketFetchResult {
   stale: boolean
 }
 
+// 캐시에 WATCHED_INDICES(현재 4개) 전부가 값으로 존재하는지 확인한다. 하나라도 빠져 있으면
+// "완전한 캐시"로 보지 않는다 — 예: 최초 실호출에서 Naver(KOSPI/KOSDAQ)는 성공했는데 Yahoo
+// (S&P500/NASDAQ)만 실패한 채로 캐시가 저장된 경우, 이 캐시를 "유효한 캐시"로 취급해 계속
+// 재사용하면 미국 지수가 장이 열릴 때까지 계속 "--"로 고정되는 문제가 있었다(실제 발생).
+function hasAllWatchedIndices(quotes: MarketQuote[]): boolean {
+  const symbols = new Set(quotes.map((quote) => quote.symbol))
+  return WATCHED_INDICES.every((item) => symbols.has(item.symbol))
+}
+
+// 캐시가 불완전한 상태(위 hasAllWatchedIndices === false)에서 모든 시장이 닫혀 있으면, 누락된
+// 지수를 확보하기 위해 재시도는 하되 useMarket의 1분 폴링을 그대로 따라가지 않는다 — 이미 계속
+// 실패 중인 API(예: Yahoo 봇 차단)를 1분마다 두드리는 것은 낭비이므로, 이 간격으로만 실제
+// 네트워크 재시도를 허용한다. 페이지를 새로고침하면 이 값은 0으로 초기화되어 즉시 재시도한다
+// (그 편이 "몇 분 더 기다려야 함"보다 자연스럽다).
+const INCOMPLETE_CACHE_RETRY_INTERVAL_MS = 5 * 60 * 1000
+let lastIncompleteRetryAttemptAt = 0
+
 // 화면의 "OO:OO 기준"은 앱이 fetch를 마친 시각이 아니라 실제 시장 데이터 자체의 updatedAt
 // (예: Yahoo의 regularMarketTime, 또는 Naver가 준 실제 거래 시각)만 쓴다 — 여러 지수 중
 // 가장 최근 값을 고르고, 단 하나도 실제 시각을 모르면(예: Naver가 시각을 안 주고 Yahoo도
@@ -88,7 +105,19 @@ export async function fetchMarketQuotes(force = false): Promise<MarketFetchResul
   const openSymbols = WATCHED_INDICES.filter((item) => isMarketOpen(item.exchange)).map((item) => item.symbol)
 
   if (!force && openSymbols.length === 0 && cache) {
-    return { quotes: cache.quotes, updatedAt: cache.updatedAt, stale: true }
+    if (hasAllWatchedIndices(cache.quotes)) {
+      return { quotes: cache.quotes, updatedAt: cache.updatedAt, stale: true }
+    }
+
+    // 캐시가 불완전하다(예: 미국 지수 누락) — 장이 닫혀 있어도 누락값을 계속 --로 방치하지
+    // 않기 위해 재시도하되, 실패가 계속될 경우를 대비해 INCOMPLETE_CACHE_RETRY_INTERVAL_MS
+    // 간격으로만 실제 네트워크 호출을 허용한다. 아직 간격이 안 됐으면 지금 있는 불완전한
+    // 캐시라도 그대로 보여준다(카드가 비는 것보다 낫다).
+    const now = Date.now()
+    if (now - lastIncompleteRetryAttemptAt < INCOMPLETE_CACHE_RETRY_INTERVAL_MS) {
+      return { quotes: cache.quotes, updatedAt: cache.updatedAt, stale: true }
+    }
+    lastIncompleteRetryAttemptAt = now
   }
 
   try {
