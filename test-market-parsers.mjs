@@ -12,7 +12,7 @@ function check(label, ok, detail) {
 }
 
 const mod = await import('./netlify/functions/lib/marketParsers.ts')
-const { toNumber, direction, pickField, findNaverItem, parseYahooChartResult, parseNaverItem } = mod
+const { toNumber, direction, pickField, findNaverItem, parseNaverItem, findNaverForeignIndexItem, parseNaverForeignIndexItem } = mod
 
 // ---- toNumber ----
 check('toNumber: 숫자 그대로', toNumber(2650.32) === 2650.32)
@@ -113,49 +113,58 @@ const naverOldShape = [
   check('datas가 비어 있으면 예외를 던짐(빈 값으로 조용히 넘어가지 않음)', threw)
 }
 
-// ---- parseYahooChartResult: 정상 케이스 ----
-const yahooOk = {
-  meta: {
-    regularMarketPrice: 5540.55,
-    chartPreviousClose: 5534.45,
-    marketState: 'REGULAR',
-    regularMarketTime: 1755331200,
-  },
-  timestamp: Array.from({ length: 10 }, (_, i) => 1755331200 - (10 - i) * 60),
-  indicators: { quote: [{ close: Array.from({ length: 10 }, (_, i) => 5530 + i) }] },
+// ---- findNaverForeignIndexItem / parseNaverForeignIndexItem: 최상위 배열 wrapper ----
+const naverForeignArrayShape = [
+  { reutersCode: '.INX', closePrice: '6,468.54', compareToPreviousClosePrice: '13.20', fluctuationsRatio: '0.20', marketStatus: 'CLOSE' },
+  { reutersCode: '.IXIC', closePrice: '21,622.98', compareToPreviousClosePrice: '-45.14', fluctuationsRatio: '-0.21', marketStatus: 'CLOSE' },
+]
+{
+  const parsed = parseNaverForeignIndexItem(naverForeignArrayShape, '.INX')
+  check(
+    '최상위 배열 wrapper + reutersCode(.INX)로 S&P500 파싱 성공',
+    parsed.value === 6468.54 && parsed.change === 13.2 && parsed.changePercent === 0.2 && parsed.marketStatus === 'CLOSE',
+    parsed,
+  )
+  check('해외 지수는 실제 거래 시각 필드를 확인 못 해 tradedAt이 항상 null(지어내지 않음)', parsed.tradedAt === null, parsed.tradedAt)
 }
 {
-  const parsed = parseYahooChartResult(yahooOk)
+  const parsed = parseNaverForeignIndexItem(naverForeignArrayShape, '.IXIC')
   check(
-    'Yahoo 정상 응답: 현재가/전일대비/등락률/시세열 파싱 성공',
-    parsed.price === 5540.55 &&
-      Math.abs(parsed.change - 6.1) < 0.001 &&
-      parsed.marketStatus === 'REGULAR' &&
-      parsed.history.length === 10 &&
-      parsed.updatedAt === new Date(1755331200 * 1000).toISOString(),
+    '같은 목록에서 reutersCode(.IXIC)로 NASDAQ 파싱 성공',
+    parsed.value === 21622.98 && parsed.change === -45.14 && parsed.changePercent === -0.21,
     parsed,
   )
 }
 
-// ---- parseYahooChartResult: 점이 너무 적으면(장 마감 직후 등) history를 비움 ----
+// ---- findNaverForeignIndexItem: { indexList: [...] } wrapper (다른 세대 스키마 대비) ----
 {
-  const parsed = parseYahooChartResult({
-    meta: { regularMarketPrice: 100, chartPreviousClose: 99 },
-    timestamp: [1, 2],
-    indicators: { quote: [{ close: [100, 101] }] },
-  })
-  check('시세열 점이 5개 미만이면 history를 빈 배열로 둠(가짜 그래프 방지)', parsed.history.length === 0, parsed.history)
+  const parsed = parseNaverForeignIndexItem(
+    { indexList: [{ itemCode: '.INX', closePrice: 6468.54, marketStatus: 'OPEN' }] },
+    '.INX',
+  )
+  check('indexList[] wrapper + itemCode 필드로도 파싱 성공', parsed.value === 6468.54 && parsed.marketStatus === 'OPEN', parsed)
 }
 
-// ---- parseYahooChartResult: regularMarketPrice 없으면 예외 ----
+// ---- parseNaverForeignIndexItem: 항목을 못 찾으면 예외(값을 지어내지 않음) ----
 {
   let threw = false
   try {
-    parseYahooChartResult({ meta: {} })
+    parseNaverForeignIndexItem(naverForeignArrayShape, '.N225')
   } catch (err) {
     threw = true
   }
-  check('regularMarketPrice가 없으면 값을 추측하지 않고 예외를 던짐', threw)
+  check('목록에 없는 reutersCode를 찾으면 값을 추측하지 않고 예외를 던짐', threw)
+}
+
+// ---- parseNaverForeignIndexItem: 현재값 필드를 못 찾으면 예외 ----
+{
+  let threw = false
+  try {
+    parseNaverForeignIndexItem([{ reutersCode: '.INX', totallyUnknownField: 123 }], '.INX')
+  } catch (err) {
+    threw = true
+  }
+  check('현재값 필드를 못 찾으면 값을 추측하지 않고 예외를 던짐', threw)
 }
 
 console.log(JSON.stringify(results, null, 2))

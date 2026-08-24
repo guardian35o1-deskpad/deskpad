@@ -45,61 +45,61 @@ export function findNaverItem(data: unknown, code: string): Record<string, unkno
   return item && typeof item === 'object' ? item : null
 }
 
-export interface YahooChartMeta {
-  regularMarketPrice?: number
-  chartPreviousClose?: number
-  previousClose?: number
-  marketState?: string
-  regularMarketTime?: number
+// (2026-08-17) 미국 지수 소스를 Yahoo Finance → Naver 해외지수로 교체하면서, Yahoo 전용
+// 파서(parseYahooChartResult 등)는 더 이상 쓰이지 않아 제거했다. 대신 아래
+// findNaverForeignIndexItem/parseNaverForeignIndexItem이 같은 역할(S&P 500/NASDAQ 파싱)을 한다.
+
+// Naver 해외지수 목록 응답이 관찰된 몇 가지 wrapper 형태(최상위 배열 / { indexList: [...] } /
+// { datas: [...] }) 중 어느 쪽이든 대응하고, reutersCode(예: ".INX")와 매칭되는 항목을 찾는다.
+// 못 찾으면 null.
+export function findNaverForeignIndexItem(data: unknown, reutersCode: string): Record<string, unknown> | null {
+  const list = Array.isArray(data)
+    ? data
+    : Array.isArray((data as { indexList?: unknown[] })?.indexList)
+      ? (data as { indexList: unknown[] }).indexList
+      : Array.isArray((data as { datas?: unknown[] })?.datas)
+        ? (data as { datas: unknown[] }).datas
+        : null
+  if (!list) return null
+
+  const matched = list.find((entry) => {
+    if (typeof entry !== 'object' || entry === null) return false
+    const e = entry as Record<string, unknown>
+    const codeCandidates = [e.reutersCode, e.itemCode, e.code, e.symbolCode]
+    return codeCandidates.some((v) => typeof v === 'string' && v.toUpperCase() === reutersCode.toUpperCase())
+  })
+  return (matched as Record<string, unknown> | undefined) ?? null
 }
 
-export interface YahooChartResult {
-  meta?: YahooChartMeta
-  timestamp?: number[]
-  indicators?: { quote?: Array<{ close?: Array<number | null> }> }
-}
-
-const HISTORY_POINTS = 30
-const MIN_HISTORY_POINTS = 5
-
-export interface ParsedYahoo {
-  price: number
+export interface ParsedNaverForeignIndex {
+  value: number
   change: number | null
   changePercent: number | null
   marketStatus: string | null
-  updatedAt: string | null
-  history: number[]
+  // 해외 지수 실제 거래 시각 필드명을 확인하지 못했다(raw 캡처로 확정 못 함) — 지어내지 않고
+  // 항상 null로 둔다. base.updatedAt도 기본값이 null이라 결과적으로 "모르면 null"이 유지된다.
+  tradedAt: string | null
 }
 
-// meta.regularMarketPrice가 없으면 예외를 던진다(호출부에서 잡아서 ok:false로 처리).
-export function parseYahooChartResult(result: YahooChartResult | undefined): ParsedYahoo {
-  const meta = result?.meta
-  const price = meta?.regularMarketPrice
-  if (typeof price !== 'number' || !Number.isFinite(price)) {
-    throw new Error('meta.regularMarketPrice 없음')
+// item을 못 찾거나 현재값 필드를 못 찾으면 예외를 던진다(호출부에서 잡아서 ok:false로 처리).
+export function parseNaverForeignIndexItem(data: unknown, reutersCode: string): ParsedNaverForeignIndex {
+  const item = findNaverForeignIndexItem(data, reutersCode)
+  if (!item) {
+    throw new Error(`응답에서 ${reutersCode} 항목을 찾지 못함 (raw: ${JSON.stringify(data).slice(0, 300)})`)
   }
 
-  const prevClose = meta?.chartPreviousClose ?? meta?.previousClose
-  const change = typeof prevClose === 'number' ? price - prevClose : null
-  const changePercent = typeof prevClose === 'number' && prevClose !== 0 ? ((price - prevClose) / prevClose) * 100 : null
-
-  const timestamps = result?.timestamp ?? []
-  const closes = result?.indicators?.quote?.[0]?.close ?? []
-  const points: number[] = []
-  for (let i = 0; i < timestamps.length && i < closes.length; i += 1) {
-    const c = closes[i]
-    if (typeof c === 'number' && Number.isFinite(c)) points.push(c)
+  const value = toNumber(pickField(item, ['closePrice', 'nowValue', 'tradePrice']))
+  if (value === null) {
+    throw new Error(`현재값 필드를 찾지 못함 (item raw: ${JSON.stringify(item).slice(0, 300)})`)
   }
-  const history = points.length >= MIN_HISTORY_POINTS ? points.slice(-HISTORY_POINTS) : []
 
-  return {
-    price,
-    change,
-    changePercent,
-    marketStatus: typeof meta?.marketState === 'string' ? meta.marketState : null,
-    updatedAt: typeof meta?.regularMarketTime === 'number' ? new Date(meta.regularMarketTime * 1000).toISOString() : null,
-    history,
-  }
+  const change = toNumber(pickField(item, ['compareToPreviousClosePrice', 'changeValue', 'compareToPreviousPrice']))
+  const changePercent = toNumber(pickField(item, ['fluctuationsRatio', 'changeRate']))
+  const marketStatusRaw = pickField(item, ['marketStatus', 'ms'])
+  const marketStatus = typeof marketStatusRaw === 'string' ? marketStatusRaw : null
+  const tradedAt = null // 해외 지수 실제 거래 시각 필드명 미확인 — 지어내지 않음
+
+  return { value, change, changePercent, marketStatus, tradedAt }
 }
 
 // Naver가 실제 거래 시각을 어떤 필드/형식으로 주는지 raw 캡처로 확정하지 못했다(market.ts

@@ -1,12 +1,16 @@
 import { chromium } from 'playwright'
 
 // 시장 카드(KOSPI/KOSDAQ/S&P500/NASDAQ) 실제 API 연동 검증.
-// 이 개발 환경은 finance.naver.com/finance.yahoo.com에 네트워크 접근이 막혀 있어
+// 이 개발 환경은 finance.naver.com/api.stock.naver.com에 네트워크 접근이 막혀 있어
 // /api/market 자체를 실제로 호출해볼 수 없다. 대신 Netlify Function이 프론트에 돌려주는
 // "정규화된 이후" 응답 형태(quotes: [{id, name, value, change, changePercent, ...}])를
 // page.route로 가로채 목업하고, App(liveMarketProvider→Market.tsx)이 그 응답을 받았을 때
 // 정확히 기대대로 렌더링/갱신/폴백하는지만 검증한다(서버 함수 내부 파서 로직 자체는
 // test-market-parsers.mjs에서 별도로 fixture 기반 유닛 테스트로 확인함).
+// (2026-08-17) 미국 지수 소스가 Yahoo → Naver 해외지수로 바뀌었지만, /api/market이 프론트에
+// 돌려주는 이 정규화된 응답 스키마 자체는 그대로다(quotes[].delayed 필드만 추가) — 그래서
+// 아래 테스트 대부분은 소스 교체와 무관하게 그대로 유효하고, 주석/변수명만 Naver 기준으로
+// 정리했다.
 const BASE_URL = 'http://localhost:4300'
 // 2026-08-17(월) 10:00 UTC = KRX 개장 시간대(브라우저 타임존이 UTC라 isMarketOpen()의
 // getHours()가 이 시각을 그대로 "로컬 시" 09~15:30 판정에 사용함) — 이 시각으로 고정해두면
@@ -38,12 +42,12 @@ function marketPayload(overrides = {}) {
       {
         id: 'SPX', name: 'S&P 500', value: 5540.55, change: 6.1, changePercent: 0.11,
         marketStatus: 'REGULAR', updatedAt: '2026-08-17T05:00:00.000Z',
-        history: [5530, 5531, 5532, 5533, 5534, 5535], ok: true,
+        history: [5530, 5531, 5532, 5533, 5534, 5535], ok: true, delayed: true,
       },
       {
         id: 'IXIC', name: 'NASDAQ', value: 17850.1, change: -32.4, changePercent: -0.18,
         marketStatus: 'REGULAR', updatedAt: '2026-08-17T05:00:00.000Z',
-        history: [17900, 17895, 17880, 17870, 17860, 17850.1], ok: true,
+        history: [17900, 17895, 17880, 17870, 17860, 17850.1], ok: true, delayed: true,
       },
     ],
     updatedAt: '2026-08-17T05:00:00.000Z',
@@ -96,10 +100,19 @@ async function main() {
       sparklineCounts,
     )
 
+    const delayedBadgeCounts = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('.market-item')).map((el) => el.querySelectorAll('.market-delayed').length),
+    )
+    check(
+      '6b) Naver 해외지수(SPX/NASDAQ)에만 "지연 시세" 배지 표시, KOSPI/KOSDAQ은 없음',
+      JSON.stringify(delayedBadgeCounts) === JSON.stringify([0, 0, 1, 1]),
+      delayedBadgeCounts,
+    )
+
     await context.close()
   }
 
-  // ---- 7~8) 부분 실패: Naver(KOSPI/KOSDAQ) 실패해도 Yahoo(SPX/NASDAQ)는 정상 표시 ----
+  // ---- 7~8) 부분 실패: Naver 국내(KOSPI/KOSDAQ) 실패해도 Naver 해외(SPX/NASDAQ)는 정상 표시 ----
   {
     const context = await browser.newContext({ viewport: { width: 2048, height: 1536 } })
     const page = await context.newPage()
@@ -124,7 +137,7 @@ async function main() {
     check('7) 값을 한 번도 못 받아온 KOSPI는 "--" 표시', kospiValue === '--', kospiValue)
 
     const spxValue = await page.evaluate(() => document.querySelectorAll('.market-item')[2]?.querySelector('.market-value')?.textContent)
-    check('8) 같은 상황에서도 SPX(성공한 소스)는 정상 값 표시', spxValue === '5,540.55', spxValue)
+    check('8) 같은 상황에서도 SPX(Naver 해외지수, 성공한 소스)는 정상 값 표시', spxValue === '5,540.55', spxValue)
 
     await context.close()
   }
@@ -323,8 +336,9 @@ async function main() {
   }
 
   // ---- 17~19) 실기기 실사용 중 실제로 발견된 문제 재현(2026-08-17): 최초 실호출에서
-  // Naver(KOSPI/KOSDAQ)만 성공하고 Yahoo(SPX/NASDAQ)는 실패해 "불완전한" 캐시가 저장되면,
-  // 장이 열릴 때까지 그 불완전한 캐시만 계속 재사용해 미국 지수가 "--"에 고정되던 버그.
+  // Naver 국내(KOSPI/KOSDAQ)만 성공하고 미국 지수 소스(당시 Yahoo, 지금은 Naver 해외지수)는
+  // 실패해 "불완전한" 캐시가 저장되면, 장이 열릴 때까지 그 불완전한 캐시만 계속 재사용해
+  // 미국 지수가 "--"에 고정되던 버그.
   // 캐시가 4개 지수를 전부 갖고 있을 때만 장외 네트워크 조회를 생략하고, 하나라도 빠져 있으면
   // (장이 닫혀 있어도) 재시도하되 계속 실패하는 API를 1분마다 두드리지 않도록 5분 간격으로만
   // 재시도하는지 확인한다(marketService.ts INCOMPLETE_CACHE_RETRY_INTERVAL_MS).
@@ -349,15 +363,15 @@ async function main() {
     })
 
     let marketCalls = 0
-    let yahooShouldSucceed = false
+    let foreignShouldSucceed = false
     await page.route('**/api/market', (route) => {
       marketCalls += 1
       const base = marketPayload()
       const quotes = base.quotes.map((q) =>
         q.id === 'SPX' || q.id === 'IXIC'
-          ? yahooShouldSucceed
+          ? foreignShouldSucceed
             ? q
-            : { ...q, value: null, change: null, changePercent: null, marketStatus: null, updatedAt: null, ok: false, error: 'HTTP 429' }
+            : { ...q, value: null, change: null, changePercent: null, marketStatus: null, updatedAt: null, ok: false, error: 'HTTP 403' }
           : q,
       )
       route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ...base, quotes }) })
@@ -370,15 +384,15 @@ async function main() {
     check('17) 캐시에 미국 지수가 빠져 있으면(불완전) 장이 닫혀 있어도 최초 1회는 다시 /api/market을 호출함', marketCalls === 1, marketCalls)
 
     const spxValueAfterMount = await page.evaluate(() => document.querySelectorAll('.market-item')[2]?.querySelector('.market-value')?.textContent)
-    check('17) Yahoo가 계속 실패하는 동안 S&P 500은 "--"로 표시(카드 자리는 유지)', spxValueAfterMount === '--', spxValueAfterMount)
+    check('17) 해외지수 소스가 계속 실패하는 동안 S&P 500은 "--"로 표시(카드 자리는 유지)', spxValueAfterMount === '--', spxValueAfterMount)
 
     // 재시도 간격(5분) 미만 동안은 1분마다 폴링해도 이미 실패 중인 API를 다시 두드리지 않는다.
     await page.clock.runFor(4 * 60 * 1000)
     await page.waitForTimeout(200)
     check('18) 재시도 간격(5분) 미만 동안은 불완전 캐시라도 추가 호출 없이 그대로 유지(과호출 방지)', marketCalls === 1, marketCalls)
 
-    // 5분이 지난 다음 폴링에서는 다시 호출하며, 이번엔 Yahoo가 성공한다고 가정하면 실제로 채워져야 한다.
-    yahooShouldSucceed = true
+    // 5분이 지난 다음 폴링에서는 다시 호출하며, 이번엔 해외지수 소스가 성공한다고 가정하면 실제로 채워져야 한다.
+    foreignShouldSucceed = true
     await page.clock.runFor(61 * 1000)
     await page.waitForTimeout(200)
     check('19) 재시도 간격 경과 후 다시 호출됨', marketCalls === 2, marketCalls)

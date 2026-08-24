@@ -1,9 +1,9 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CalendarEvent } from '../lib/calendarData'
 import type { CalendarStatus } from '../hooks/useCalendarEvents'
 import { CATEGORY_COLORS, CATEGORY_LABELS, CATEGORY_ORDER } from '../lib/calendarData'
 import { buildMonthGrid } from '../lib/calendarMonth'
-import { diffInDays, formatDateKey, parseDateKey, startOfDay } from '../lib/date'
+import { addDays, diffInDays, formatDateKey, parseDateKey, startOfDay } from '../lib/date'
 import { useSwipeNav } from '../hooks/useSwipeNav'
 
 const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토']
@@ -31,6 +31,55 @@ function formatUpcomingDate(dateKey: string): string {
   return `${date.getMonth() + 1}월 ${date.getDate()}일 (${weekday})`
 }
 
+// 오늘 날짜를 최초 1회만 계산해서 고정해두면(과거 버그), DeskPad를 자정 넘겨 계속 켜둘 때
+// "오늘" 원형 표시/다가오는 일정 기준/오늘 버튼이 실제 날짜와 어긋난다. 다음 자정에 다시
+// 계산하도록 타임아웃을 걸어두고, 백그라운드/화면 꺼짐 후 복귀 시(visibilitychange/pageshow/
+// focus)에도 즉시 재계산한다 — 구형 iPad 백그라운드에서 setTimeout이 밀리거나 아예 안 불릴 수
+// 있어서 이 안전망이 필요하다. 1분 폴링 같은 고빈도 타이머는 쓰지 않는다.
+function useTodaySync(): Date {
+  const [today, setToday] = useState(() => startOfDay(new Date()))
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null
+
+    function sync() {
+      setToday((prev) => {
+        const now = startOfDay(new Date())
+        return prev.getTime() === now.getTime() ? prev : now
+      })
+      scheduleNext()
+    }
+
+    function scheduleNext() {
+      if (timer) clearTimeout(timer)
+      const now = new Date()
+      const nextMidnight = startOfDay(addDays(now, 1))
+      // 자정 "직후"로 살짝 여유를 둬서, 타이머 정밀도 오차로 자정 이전에 불려 날짜가 그대로인
+      // 채로 낭비되는 걸 방지한다.
+      const delay = Math.max(1000, nextMidnight.getTime() - now.getTime() + 1000)
+      timer = setTimeout(sync, delay)
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'visible') sync()
+    }
+
+    scheduleNext()
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('pageshow', sync)
+    window.addEventListener('focus', sync)
+
+    return () => {
+      if (timer) clearTimeout(timer)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('pageshow', sync)
+      window.removeEventListener('focus', sync)
+    }
+  }, [])
+
+  return today
+}
+
 interface CalendarProps {
   // 실제 Google Calendar 일정과 조회 상태. 조회 로직(useCalendarEvents) 자체는 App.tsx가
   // 호출한다 — App.tsx의 refreshAll()이 날씨/캘린더/시장 세 소스를 한 번에 새로고침하려면
@@ -40,7 +89,7 @@ interface CalendarProps {
 }
 
 function Calendar({ events, status }: CalendarProps) {
-  const today = useMemo(() => startOfDay(new Date()), [])
+  const today = useTodaySync()
   const todayKey = useMemo(() => formatDateKey(today), [today])
 
   const [viewYear, setViewYear] = useState(today.getFullYear())
@@ -50,6 +99,28 @@ function Calendar({ events, status }: CalendarProps) {
   // null이면 애니메이션 없음(최초 렌더). key로 강제 리마운트시켜 매번 애니메이션이 재생되게 한다.
   const [slideDir, setSlideDir] = useState<'next' | 'prev' | null>(null)
   const transitionLockRef = useRef(false)
+
+  // 자정이 지나 todayKey 자체가 바뀌었을 때, 사용자가 계속 "오늘"을 보고 있던 경우에만(다른
+  // 날짜를 수동으로 선택해두지 않았던 경우) 화면도 새 오늘로 자동 이동한다 — "오늘" 버튼을
+  // 눌렀을 때와 동일한 동작을 자정 경과 시점에 자동으로 적용하는 것. 다른 날짜를 보고 있었다면
+  // 사용자의 선택을 그대로 존중해 건드리지 않는다.
+  const selectedKeyRef = useRef(selectedKey)
+  useEffect(() => {
+    selectedKeyRef.current = selectedKey
+  }, [selectedKey])
+  const prevTodayKeyRef = useRef(todayKey)
+  useEffect(() => {
+    if (prevTodayKeyRef.current === todayKey) return
+    const oldTodayKey = prevTodayKeyRef.current
+    const wasOnToday = selectedKeyRef.current === oldTodayKey
+    prevTodayKeyRef.current = todayKey
+
+    if (wasOnToday) {
+      setSelectedKey(todayKey)
+      setViewYear(today.getFullYear())
+      setViewMonth(today.getMonth())
+    }
+  }, [todayKey, today])
 
   const displayEvents = events ?? []
 

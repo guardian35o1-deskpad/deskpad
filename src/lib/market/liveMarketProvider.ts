@@ -13,6 +13,8 @@ interface MarketApiQuote {
   updatedAt: string | null
   history: number[]
   ok: boolean
+  // Naver 해외지수(S&P 500/NASDAQ)처럼 소스 자체가 지연 시세인 경우 서버가 true로 내려준다.
+  delayed?: boolean
 }
 
 interface MarketApiResponse {
@@ -57,6 +59,7 @@ export const liveMarketProvider: MarketProvider = {
           // 않는다. 예전에는 이 fallback 때문에 Naver처럼 실제 시각을 안 주는 소스가 항상
           // "방금 조회함"처럼 보여서, 휴장일 종가 데이터에도 "18:42 기준" 같은 오해를 낳았다.
           updatedAt: quote.updatedAt,
+          delayed: quote.delayed,
         }
         return mapped
       })

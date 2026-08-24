@@ -61,6 +61,10 @@ function MarketItem({ quote }: { quote: MarketQuote }) {
     <li className={`market-item ${quote.stale ? 'is-stale' : ''}`}>
       <div className="market-item-top">
         <span className="market-name">{quote.name}</span>
+        {/* Naver 해외지수(S&P 500/NASDAQ)는 약 10~20분 지연 시세라고 안내돼 있어, 착각하지
+            않도록 아주 작은 배지만 붙인다. 국내 지수(KOSPI/KOSDAQ)는 delayed가 없다.
+            .market-name 밖의 형제 요소로 둬서, 지수명 텍스트 자체는 그대로 유지한다. */}
+        {quote.delayed && <span className="market-delayed">지연 시세</span>}
         {hasSparkline && (
           <svg
             className="market-sparkline"

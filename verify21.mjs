@@ -122,6 +122,124 @@ async function main() {
     await context.close()
   }
 
+  // ---- 오늘 날짜 자동 갱신(useTodaySync) ----
+  // Calendar.tsx의 today가 useMemo(..., [])로 최초 1회만 고정되던 버그 수정(2026-08-24) 검증.
+  // 자정을 넘겨도 "오늘" 원형 표시가 갱신되는지, 백그라운드/화면 꺼짐 후 복귀(visibilitychange)
+  // 시에도 즉시 재계산되는지, 사용자가 다른 날짜를 보고 있을 때는 선택을 자동으로 옮기지
+  // 않는지, "오늘" 버튼과 is-today/is-selected CSS 겹침이 정상인지 확인한다.
+  {
+    const context = await browser.newContext({ viewport: { width: 1366, height: 1024 } })
+    const page = await context.newPage()
+    await page.route('**/api/market', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(marketPayload()) }),
+    )
+    await page.route('**/api/calendar-events', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ events: [] }) }),
+    )
+    await page.route('https://api.open-meteo.com/**', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          current: { temperature_2m: 25, weather_code: 1 },
+          daily: { temperature_2m_max: [26, 27, 28, 29], temperature_2m_min: [20, 21, 22, 23], weather_code: [1, 1, 1, 1] },
+        }),
+      }),
+    )
+    // 브라우저 타임존이 UTC라(위 스와이프 블록과 동일 전제), UTC 기준 날짜 경계로 시각을 고정한다.
+    await page.clock.install({ time: new Date('2026-08-17T10:00:00.000Z') })
+    await page.addInitScript(() => window.localStorage.setItem('deskpad:view-mode', 'default'))
+    await page.goto(BASE_URL)
+    await page.waitForSelector('.calendar-month-title')
+    await page.waitForTimeout(400)
+
+    const todayCellDay = () => page.locator('.calendar-cell.is-today .calendar-cell-day').innerText()
+    check('19: 초기 오늘 표시 = 17일', (await todayCellDay()) === '17', await todayCellDay())
+
+    // 화면이 꺼져 있던 동안(백그라운드/suspend) 자정을 넘겼다고 가정한다. setSystemTime은
+    // 대기 중인 타이머를 실행하지 않고 시각만 순간이동시켜, 구형 iPad가 백그라운드에서
+    // setTimeout을 못 돌리는 상황을 그대로 재현한다 — 그 다음 화면이 다시 보이면
+    // (visibilitychange) useTodaySync의 안전망이 재계산해야 한다.
+    await page.clock.setSystemTime(new Date('2026-08-18T09:00:00.000Z'))
+    await page.evaluate(() => {
+      Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+      document.dispatchEvent(new Event('visibilitychange'))
+      // 실제 기기라면 화면을 다시 보는 순간 사용자가 손으로 터치하기 마련이다 — 그 "조작"
+      // 신호(useLongIdleTimer.ts의 ACTIVITY_EVENTS)를 함께 보내, 시간이 하루 이상 순간이동한
+      // 것 때문에 30분 대기(Idle) 화면이 끼어들어 이후 클릭을 가로채는 것을 막는다(오늘 날짜
+      // 갱신 로직과는 무관한, Idle 타이머의 정상 동작 — 여기서는 건드리지 않고 테스트에서만
+      // 우회한다).
+      window.dispatchEvent(new Event('pointerdown'))
+    })
+    await page.waitForTimeout(200)
+
+    check('20: 백그라운드 복귀(visibilitychange) 시 오늘 표시가 18일로 갱신됨', (await todayCellDay()) === '18', await todayCellDay())
+
+    const selectedAfterRollover = await page
+      .locator('.calendar-cell.is-today.is-selected .calendar-cell-day')
+      .innerText()
+      .catch(() => null)
+    check(
+      '21: 자정 경과 시점에 계속 "오늘"을 보고 있었다면 선택도 새 오늘(18일)로 함께 이동',
+      selectedAfterRollover === '18',
+      selectedAfterRollover,
+    )
+
+    // 다른 날짜(5일)를 수동으로 선택해둔 상태에서 다시 하루가 더 지나도, 선택은 사용자 뜻대로
+    // 그대로 두고 "오늘" 원형 표시만 옮겨가야 한다.
+    const dateCell5 = page.locator('.calendar-cell:not(.is-outside)').filter({ hasText: /^5$/ }).first()
+    await dateCell5.click()
+    await page.waitForTimeout(150)
+    const selected5 = await page.locator('.calendar-cell.is-selected .calendar-cell-day').innerText()
+    check('22: 5일 수동 선택 확인(다음 단계 전제)', selected5 === '5', selected5)
+
+    await page.clock.setSystemTime(new Date('2026-08-19T09:00:00.000Z'))
+    await page.evaluate(() => {
+      Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+      document.dispatchEvent(new Event('visibilitychange'))
+      // 실제 기기라면 화면을 다시 보는 순간 사용자가 손으로 터치하기 마련이다 — 그 "조작"
+      // 신호(useLongIdleTimer.ts의 ACTIVITY_EVENTS)를 함께 보내, 시간이 하루 이상 순간이동한
+      // 것 때문에 30분 대기(Idle) 화면이 끼어들어 이후 클릭을 가로채는 것을 막는다(오늘 날짜
+      // 갱신 로직과는 무관한, Idle 타이머의 정상 동작 — 여기서는 건드리지 않고 테스트에서만
+      // 우회한다).
+      window.dispatchEvent(new Event('pointerdown'))
+    })
+    await page.waitForTimeout(200)
+
+    check('23: 다른 날짜를 보던 중 자정이 지나도 오늘 표시는 19일로 갱신됨', (await todayCellDay()) === '19', await todayCellDay())
+    const stillSelected5 = await page.locator('.calendar-cell.is-selected .calendar-cell-day').innerText()
+    check('24: 사용자가 수동 선택한 날짜(5일)는 자동으로 옮겨지지 않고 그대로 유지', stillSelected5 === '5', stillSelected5)
+    const todayAndSelectedOverlap = await page.locator('.calendar-cell.is-today.is-selected').count()
+    check('25: 이 상태에서 오늘(19일)과 선택(5일)이 겹치지 않음(서로 다른 셀)', todayAndSelectedOverlap === 0, todayAndSelectedOverlap)
+
+    // "오늘" 버튼을 누르면 현재 월로 이동 + 오늘 날짜 선택.
+    await page.locator('.calendar-today-btn').click()
+    await page.waitForTimeout(150)
+    const afterTodayBtn = await page
+      .locator('.calendar-cell.is-today.is-selected .calendar-cell-day')
+      .innerText()
+      .catch(() => null)
+    check('26: "오늘" 버튼 클릭 시 오늘(19일)이 선택 상태가 됨(is-today + is-selected 겹침)', afterTodayBtn === '19', afterTodayBtn)
+
+    // is-today(파란 원)와 is-selected(테두리)가 같은 셀에 겹칠 때 두 스타일이 서로를 지우지
+    // 않고 함께 적용돼야 한다(요구사항 5: CSS 우선순위 점검) — App.css는 이미 서로 다른
+    // 속성(background-color / box-shadow)에 각각 적용돼 있어(407~415행) 코드 변경은 없었고,
+    // 실제 계산된 스타일로 그 전제가 맞는지 확인만 한다.
+    const composedStyle = await page.evaluate(() => {
+      const el = document.querySelector('.calendar-cell.is-today.is-selected .calendar-cell-day')
+      if (!el) return null
+      const style = window.getComputedStyle(el)
+      return { backgroundColor: style.backgroundColor, boxShadow: style.boxShadow }
+    })
+    check(
+      '27: 오늘+선택 겹침 시 파란 배경(is-today)과 테두리(is-selected)가 서로 지우지 않고 함께 적용됨',
+      composedStyle?.backgroundColor === 'rgb(42, 107, 255)' && !!composedStyle?.boxShadow && composedStyle.boxShadow !== 'none',
+      composedStyle,
+    )
+
+    await context.close()
+  }
+
   // ---- 도크 ↻ 새로고침 버튼 ----
   {
     const context = await browser.newContext({ viewport: { width: 1366, height: 1024 } })

@@ -16,6 +16,10 @@ export interface MarketQuote {
   // 이번 갱신 시도가 실패해서 마지막으로 성공했던 값을 그대로 보여주고 있으면 true.
   // Market.tsx가 아주 작은 "지연" 표시를 붙이는 데만 쓴다(카드 레이아웃은 바꾸지 않음).
   stale?: boolean
+  // 소스 자체가 지연 시세인 경우(예: Naver 해외지수, 약 10~20분 지연) true.
+  // stale과는 별개 — stale은 "이번 갱신 실패로 이전 값을 보여줌", delayed는 "정상 갱신이어도
+  // 원래 지연된 시세"라는 뜻. Market.tsx가 작은 "지연" 배지를 붙이는 데만 쓴다.
+  delayed?: boolean
 }
 
 export type Exchange = 'KRX' | 'US'

@@ -695,6 +695,15 @@
   font-weight: 600;
 }
 
+/* Naver 해외지수(S&P 500/NASDAQ)가 약 10~20분 지연 시세임을 아주 작게만 알린다 —
+   카드 레이아웃/애니메이션은 건드리지 않고, 이름 옆에 작은 글자만 덧붙인다. */
+.market-delayed {
+  margin-left: 0.4vw;
+  font-size: clamp(8px, 0.9vw, 15px);
+  font-weight: 500;
+  color: #6b6f80;
+}
+
 .market-sparkline {
   width: 5.5vw;
   height: 2.2vh;
