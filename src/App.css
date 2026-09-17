@@ -41,6 +41,12 @@
   display: flex;
   flex-direction: column;
   gap: 1.1vh;
+  /* app-content 자체는 width/height 100%라 항상 화면 전체를 덮는데, 사진 모드에서는
+     그 뒤(z-index 0)에 깔린 photo-mode-backdrop을 탭해서 기본 모드로 돌아가야 한다.
+     app-content 전체를 클릭 통과(none)로 두고, 실제로 눌려야 하는 header/main/footer만
+     아래에서 각각 auto로 되돌린다 — 그래야 내용이 없는 빈 공간(사진 모드의 스페이서
+     자리)만 정확히 뚫려서 그 클릭이 photo-mode-backdrop까지 도달한다(42번 2차). */
+  pointer-events: none;
 }
 
 /* Header row: Clock + Weather card. 시간이 화면에서 가장 먼저 보여야 하므로
@@ -54,58 +60,38 @@
   /* 헤더(시계+날씨)가 화면 상단의 주인공이 되도록 여백을 늘려
      아래 폰트 확대분이 눌리지 않게 한다(기존 1vh 대비 약 30% 증가). */
   padding-bottom: 1.3vh;
+  pointer-events: auto;
 }
 
-/* 하단 영역 wrapper. 기본 모드는 달력(app-main)만 보이고, 사진 모드는 상태에 따라
-   달력(app-main) ↔ 사진(photo-panel)이 이 안에서 서로 겹쳐 크로스페이드된다(42번).
-   헤더(시계+날씨)와 도크는 이 wrapper 밖에 있어 모드/idle 상태와 무관하게 항상 그대로다. */
-.app-body {
-  position: relative;
+.app-main {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  pointer-events: auto;
+}
+
+/* 사진 모드에서는 달력을 아예 마운트하지 않고(App.tsx) 그 자리에 이 빈 스페이서를 대신
+   둔다. app-main과 똑같이 flex:1을 가져가서, 아래 도크가 있는 footer가 기본 모드와
+   동일하게 화면 맨 아래에 그대로 붙어 있게 한다(42번 2차). app-content가 pointer-events:
+   none이므로 이 스페이서는 별도 처리 없이도 이미 클릭을 통과시킨다. */
+.app-main-spacer {
   flex: 1 1 auto;
   min-height: 0;
 }
 
-.app-main {
+/* 사진 모드 배경(App.tsx의 PhotoBackground를 감싸는 탭 영역). 사용자가 등록한 사진이
+   viewport 전체를 덮고, 탭하면 App.tsx가 실제로 setMode('default')를 호출한다.
+   app-content(z-index 2)보다 z-index가 낮아 시계/날씨/도크가 항상 그 위에 보인다. */
+.photo-mode-backdrop {
   position: absolute;
   inset: 0;
-  z-index: 1;
-  display: flex;
-  opacity: 1;
-  transition: opacity 0.9s ease;
-}
-
-/* 사진 모드에서 하단에 정보(달력/일정/주식)가 아니라 사진을 보여줘야 할 때 달력을 숨긴다
-   (기존 .app-content.is-idle과 동일한 opacity 방식, 범위만 하단 영역으로 좁혔다). */
-.app-main.is-idle {
-  opacity: 0;
-  pointer-events: none;
-}
-
-/* 사진 모드 전용 하단 사진 표시 영역. PhotoBackground를 그대로 재사용하되(로직 변경 없음),
-   기존 .photo-background-layer(전체 화면 고정, ScreenSaver 등에서 그대로 사용 중)와 달리
-   이 영역 안에서는 absolute로 오버라이드해 헤더를 가리지 않고 이 박스 안에서만 표시한다. */
-.photo-panel {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  overflow: hidden;
-  background-color: #05060a;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.9s ease;
-}
-
-.photo-panel.is-visible {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.photo-panel .photo-background-layer {
-  position: absolute;
+  z-index: 0;
+  cursor: pointer;
 }
 
 .app-footer {
   flex: 0 0 auto;
+  pointer-events: auto;
 }
 
 /* Clock: 시간 아래에 날짜/요일을 붙여 하나의 묶음처럼 보이게 한다.
@@ -660,22 +646,9 @@
   gap: 1.4vw;
 }
 
-/* 사진 모드에서 하단에 사진이 보일 때 Market도 달력과 함께 숨긴다(터치하면 둘 다 같이
-   다시 나타남 — 기존 동작 그대로, 범위만 하단 영역으로 좁혔다). */
-.market-wrap {
-  flex: 1 1 auto;
-  min-width: 0;
-  opacity: 1;
-  transition: opacity 0.9s ease;
-}
-
-.market-wrap.is-idle {
-  opacity: 0;
-  pointer-events: none;
-}
-
 /* Market (footer) */
 .market {
+  flex: 1 1 auto;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -778,6 +751,10 @@
 /* 우측 하단 컨트롤 도크: 기본/사진/설정을 작고 눈에 덜 띄게 모아둔다. */
 .control-dock {
   flex: 0 0 auto;
+  /* 사진 모드에서는 Market이 아예 렌더링되지 않아 footer 안에 도크 혼자 남는다.
+     margin-left: auto로 그 경우에도 항상 우측 끝에 붙는다(Market이 있을 때는
+     Market의 flex:1이 이미 같은 효과를 내므로 아무 차이가 없다). */
+  margin-left: auto;
   display: flex;
   align-items: center;
   gap: 0.3vw;
@@ -870,6 +847,22 @@
   background-color: #05060a;
 }
 
+/* AUTO FIT(42번 2차): 세로/정사각 사진은 위 .photo-background(contain)만 쓰면 좌우에
+   큰 검정 여백이 남아 "배경" 느낌이 사라진다. 이 경우 PhotoBackground.tsx가 같은 사진을
+   한 번 더 겹쳐 그린다 — 뒤(.photo-background-fill)는 화면을 꽉 채우는 cover, 그 위에
+   어둡게(.photo-background-fill-dim), 맨 앞에는 원본이 잘리지 않는 contain(기존
+   .photo-background)을 그대로 올린다. 성능 우선 원칙에 따라 blur는 쓰지 않는다. */
+.photo-background-fill {
+  background-size: cover;
+  filter: brightness(0.55);
+}
+
+.photo-background-fill-dim {
+  position: absolute;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.25);
+}
+
 /* 기본(정보) 모드 전용 고정 배경 — 사용자 등록 사진이 아니라 앱에 내장된 자연 풍경
    이미지 1장을 항상 그대로 사용한다(사용자 사진은 사진 모드/Idle 액자에서만 등장).
    사용자 사진(.photo-background)과 달리 "잘리면 안 되는 소중한 원본"이 아니라 장식용
@@ -913,9 +906,8 @@
 }
 
 /* 앱 전체 30분 대기(디지털 액자) 레이어. app-content(z-index 2)보다 위에서 기본/사진
-   모드 어느 화면이든 덮는다. 구조와 opacity 전환 방식은 photo-panel과 동일하게 맞췄다
-   (다중 blur 금지, 무거운 효과 없음). 이 기능(ScreenSaver)은 42번 사진 모드 하단 개편과
-   무관하게 그대로 유지한다. */
+   모드 어느 화면이든 덮는다(다중 blur 금지, 무거운 효과 없음). 이 기능(ScreenSaver)은
+   42번 사진 모드 개편과 무관하게 그대로 유지한다. */
 .screensaver-layer {
   position: absolute;
   inset: 0;
