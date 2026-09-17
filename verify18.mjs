@@ -424,7 +424,20 @@ async function main() {
       const layers = document.querySelectorAll('.photo-mode-backdrop .photo-background')
       return !fill && layers.length === 1
     })
-    check('12) 가로 사진(1600x900) → AUTO FIT 없이 단일 cover 레이어만 렌더링', landscapeIsSingleLayer)
+    check('12) 가로 사진(1600x900) → AUTO FIT 없이 단일 레이어만 렌더링', landscapeIsSingleLayer)
+
+    // 42번 3차 회귀 확인: 단일 레이어라도 background-size가 실제로 cover여야 화면 전체를
+    // 채운다. contain으로 되돌아가면(회귀) 화면 가운데 사진이 액자처럼 떠 보이는 문제가
+    // 재발한다 — 이번에 발견/수정한 버그라 반드시 자동 테스트로 고정한다.
+    const landscapeBackgroundSize = await page.evaluate(() => {
+      const layer = document.querySelector('.photo-mode-backdrop .photo-background')
+      return layer ? getComputedStyle(layer).backgroundSize : null
+    })
+    check(
+      '12) 가로 사진 background-size가 cover(화면 전체를 꽉 채움, contain 아님)',
+      landscapeBackgroundSize === 'cover',
+      { landscapeBackgroundSize },
+    )
 
     await context.close()
   }

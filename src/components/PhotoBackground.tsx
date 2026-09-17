@@ -113,7 +113,13 @@ function PhotoBackground({ photos }: PhotoBackgroundProps) {
     <div className="photo-background-layer">
       {currentUrl ? (
         isLandscape ? (
-          <div className="photo-background" style={{ backgroundImage: `url(${currentUrl})` }} />
+          // 가로 사진: 기본 배경(default-background)과 동일하게 cover로 화면 전체를 꽉 채운다.
+          // .photo-background만 쓰면 기본값(contain)이 적용돼 화면 가운데 사진이 액자처럼
+          // 떠 보이는 문제가 있었다(42번 3차 확인) — photo-background-cover로 덮어쓴다.
+          <div
+            className="photo-background photo-background-cover"
+            style={{ backgroundImage: `url(${currentUrl})` }}
+          />
         ) : (
           <>
             {/* AUTO FIT(세로/정사각 사진): 뒤 배경(확대+어둡게) → 원본(잘리지 않게) 순서로
