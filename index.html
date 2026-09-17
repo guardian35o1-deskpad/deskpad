@@ -3,7 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- iPad에서 두 손가락 확대/더블탭 확대를 막아 시계·UI 위치가 어긋나는 것을 방지한다(42번).
+         가로/세로 회전 자체는 이 설정과 무관하게 그대로 지원된다. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
     <title>DeskPad</title>
 
     <!-- PWA: 홈 화면에 추가해 Safari 주소창/탭 없이 단독 실행되도록 -->

@@ -13,6 +13,11 @@ body {
   -webkit-tap-highlight-color: transparent;
   -webkit-user-select: none;
   user-select: none;
+  /* 더블탭/핀치 확대를 막는다(manipulation = pan은 허용하되 확대 제스처는 비활성화).
+     Calendar의 좌우 스와이프(useSwipeNav)는 touchmove 좌표만 읽고 브라우저 기본 동작을
+     막지 않으므로 이 설정과 충돌하지 않는다. 나머지는 index.html의 viewport
+     maximum-scale/user-scalable 및 App.tsx의 gesturestart 차단과 함께 42번에서 추가. */
+  touch-action: manipulation;
 }
 
 *,

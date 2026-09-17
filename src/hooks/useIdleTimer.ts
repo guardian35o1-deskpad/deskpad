@@ -10,16 +10,26 @@ const ACTIVITY_EVENTS = ['pointerdown', 'touchstart', 'keydown'] as const
 // 정보 Dashboard를 잠깐 보여주고(isIdle=false), timeoutMs 동안 추가 입력이 없으면 다시
 // 사진+시계 화면으로 돌아간다(isIdle=true).
 // suspend가 true인 동안(예: 설정 모달이 열려 있을 때)은 자동으로 사진 화면으로 되돌아가지 않는다.
-export function useIdleTimer(active: boolean, timeoutMs: number, suspend: boolean): boolean {
+// reentryToken(선택): 값이 바뀔 때마다 사진 화면으로 강제 재진입시킨다. active(사진 모드)가
+// 이미 true인 상태에서는 setMode('photo')를 다시 호출해도 React가 동일 값이라 리렌더/이펙트를
+// 건너뛰므로(42번 버그: 사진→탭→정보화면 상태에서 '사진' 버튼을 다시 눌러도 반응 없음), 도크의
+// '사진' 버튼 클릭마다 App.tsx가 이 토큰을 1씩 증가시켜 아래 이펙트를 강제로 재실행한다.
+export function useIdleTimer(
+  active: boolean,
+  timeoutMs: number,
+  suspend: boolean,
+  reentryToken?: number,
+): boolean {
   const [isIdle, setIsIdle] = useState(active)
   const timerRef = useRef<number | null>(null)
 
-  // 사진 모드로 (다시) 들어올 때마다 항상 사진+시계 화면부터 보여준다.
+  // 사진 모드로 (다시) 들어올 때마다, 그리고 이미 사진 모드인 채로 재진입이 요청됐을 때(위 참고)
+  // 항상 사진+시계 화면부터 보여준다.
   useEffect(() => {
     if (active) {
       setIsIdle(true)
     }
-  }, [active])
+  }, [active, reentryToken])
 
   useEffect(() => {
     if (!active) return

@@ -211,9 +211,11 @@ async function main() {
 
     await page.clock.runFor(45 * 60 * 1000)
     const screensaverNotShown = await page.evaluate(() => !document.querySelector('.screensaver.is-visible'))
-    // 사진 모드 자체의 기존 "탭→30초간 Dashboard→자동 복귀" 동작(15번)은 이번 변경과
-    // 무관하게 그대로 살아있어야 한다 — idle-layer(사진 모드 전용)는 여전히 존재.
-    const photoModeIdleLayerPresent = await page.evaluate(() => !!document.querySelector('.idle-layer'))
+    // 사진 모드 자체의 기존 "탭→30초간 Dashboard→자동 복귀" 동작(15번)은 이번 변경(42번)과
+    // 무관하게 그대로 살아있어야 한다 — 42번부터는 전체화면 idle-layer 대신 하단 photo-panel이
+    // 그 역할을 한다(상단 시계+날씨는 항상 그대로, 하단만 사진으로 대기 표시).
+    const photoPanelVisible = await page.evaluate(() => !!document.querySelector('.photo-panel.is-visible'))
+    const headerStillPresent = await page.evaluate(() => !!document.querySelector('.app-header-row'))
     const modeAfter = await page.evaluate(() => window.localStorage.getItem('deskpad:view-mode'))
 
     check('6) 사진 모드로 전환됨(전제 조건)', modeBefore === 'photo')
@@ -221,7 +223,8 @@ async function main() {
       '6) 사진 모드에서는 45분(가상)이 지나도 30분 스크린세이버가 뜨지 않음(이미 액자라 불필요)',
       screensaverNotShown,
     )
-    check('6) 사진 모드 전용 idle-layer(15번, 탭-리빌 30초 타이머)는 그대로 존재', photoModeIdleLayerPresent)
+    check('6) 사진 모드 하단 대기 화면(photo-panel, 15번 탭-리빌 30초 타이머)은 그대로 존재', photoPanelVisible)
+    check('6) 사진 모드에서도 상단 시계+날씨(app-header-row)는 그대로 유지(42번)', headerStillPresent)
     check('6) viewMode="photo" 그대로 유지', modeAfter === 'photo')
 
     await context.close()
@@ -267,6 +270,105 @@ async function main() {
     check('7) 기본 모드에서 다시 30분(가상) 지나면 정상적으로 스크린세이버 표시', shownAfter31MinInDefault)
     check('7) 터치하면 사라지고, 이미 기본 모드였으므로 자연히 기본 정보화면으로 복귀', hiddenAfterTap)
     check('7) viewMode="default" 그대로 유지(도크 버튼으로만 변경되는 원칙 유지)', modeAfterTap === 'default')
+
+    await context.close()
+  }
+
+  // ---- 8) [42번] 사진 모드에서 터치로 정보 노출 중 [사진] 버튼을 다시 눌러도
+  //     이미 mode==='photo'라 이전에는 아무 반응이 없었다 — 대기시간 없이 즉시
+  //     사진으로 복귀해야 하고, 노출 중에도 도크는 항상 눌려야 한다. ----
+  {
+    const context = await browser.newContext({ viewport: { width: 2048, height: 1536 } })
+    const page = await context.newPage()
+    await page.goto(BASE_URL)
+    await page.waitForTimeout(200)
+
+    await page.click('.dock-btn:has-text("사진")')
+    await page.waitForTimeout(100)
+    const photoVisibleAtStart = await page.evaluate(() => !!document.querySelector('.photo-panel.is-visible'))
+
+    await page.evaluate(() => window.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })))
+    await page.waitForTimeout(200)
+    const infoShownAfterTap = await page.evaluate(() => !document.querySelector('.photo-panel.is-visible'))
+    const dockClickableAfterTap = await page.evaluate(() => {
+      const dock = document.querySelector('.control-dock')
+      return !!dock && getComputedStyle(dock).pointerEvents !== 'none'
+    })
+
+    // 대기시간(기본 30초)까지 기다리지 않고, 정보가 노출된 상태에서 곧바로 재클릭한다.
+    await page.click('.dock-btn:has-text("사진")')
+    await page.waitForTimeout(100)
+    const photoVisibleImmediatelyAfterReclick = await page.evaluate(
+      () => !!document.querySelector('.photo-panel.is-visible'),
+    )
+
+    check('8) 사진 모드 진입 직후 하단에 사진 표시(photo-panel.is-visible)', photoVisibleAtStart)
+    check('8) 터치하면 하단에 정보(달력/일정/주식) 노출, 사진은 숨김', infoShownAfterTap)
+    check('8) 정보 노출 중에도 도크(control-dock)는 항상 클릭 가능', dockClickableAfterTap)
+    check(
+      '8) 정보 노출 중 [사진] 버튼 재클릭 → 대기시간 없이 즉시 사진으로 복귀(42번 재진입 버그 수정)',
+      photoVisibleImmediatelyAfterReclick,
+    )
+
+    await context.close()
+  }
+
+  // ---- 9) [42번] 상단 시계+날씨(app-header-row)는 기본/사진 모드는 물론, 사진 모드 안에서
+  //     터치로 정보가 노출되는 동안에도 위치·크기가 절대 바뀌지 않아야 한다. ----
+  {
+    const context = await browser.newContext({ viewport: { width: 2048, height: 1536 } })
+    const page = await context.newPage()
+    await page.goto(BASE_URL)
+    await page.waitForTimeout(200)
+
+    const readHeaderBox = () =>
+      page.evaluate(() => {
+        const el = document.querySelector('.app-header-row')
+        const r = el?.getBoundingClientRect()
+        return r ? { top: r.top, left: r.left, width: r.width, height: r.height } : null
+      })
+
+    const headerInDefault = await readHeaderBox()
+
+    await page.click('.dock-btn:has-text("사진")')
+    await page.waitForTimeout(100)
+    const headerInPhotoIdle = await readHeaderBox()
+
+    await page.evaluate(() => window.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })))
+    await page.waitForTimeout(200)
+    const headerInPhotoRevealed = await readHeaderBox()
+
+    check('9) 기본 모드에서 헤더(시계+날씨) 위치/크기 확인(기준값)', !!headerInDefault, headerInDefault)
+    check(
+      '9) 사진 모드(대기) 진입해도 헤더 위치/크기 동일',
+      JSON.stringify(headerInDefault) === JSON.stringify(headerInPhotoIdle),
+      { headerInDefault, headerInPhotoIdle },
+    )
+    check(
+      '9) 사진 모드에서 터치로 정보를 노출해도 헤더 위치/크기 동일(상단 고정)',
+      JSON.stringify(headerInDefault) === JSON.stringify(headerInPhotoRevealed),
+      { headerInDefault, headerInPhotoRevealed },
+    )
+
+    await context.close()
+  }
+
+  // ---- 10) [42번] iPad 핀치/더블탭 확대 방지용 viewport meta 값 확인 ----
+  {
+    const context = await browser.newContext({ viewport: { width: 2048, height: 1536 } })
+    const page = await context.newPage()
+    await page.goto(BASE_URL)
+    await page.waitForTimeout(100)
+
+    const viewportContent = await page.evaluate(
+      () => document.querySelector('meta[name="viewport"]')?.getAttribute('content') ?? '',
+    )
+
+    check(
+      '10) viewport meta에 확대 방지 설정(maximum-scale=1.0, user-scalable=no) 포함',
+      viewportContent.includes('maximum-scale=1.0') && viewportContent.includes('user-scalable=no'),
+      viewportContent,
+    )
 
     await context.close()
   }

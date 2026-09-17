@@ -41,14 +41,6 @@
   display: flex;
   flex-direction: column;
   gap: 1.1vh;
-  opacity: 1;
-  transition: opacity 0.9s ease;
-}
-
-/* Idle Mode 진입 시 홈 화면 콘텐츠는 페이드아웃하고 조작을 막는다(무거운 효과 없이 opacity만 사용). */
-.app-content.is-idle {
-  opacity: 0;
-  pointer-events: none;
 }
 
 /* Header row: Clock + Weather card. 시간이 화면에서 가장 먼저 보여야 하므로
@@ -64,10 +56,52 @@
   padding-bottom: 1.3vh;
 }
 
-.app-main {
+/* 하단 영역 wrapper. 기본 모드는 달력(app-main)만 보이고, 사진 모드는 상태에 따라
+   달력(app-main) ↔ 사진(photo-panel)이 이 안에서 서로 겹쳐 크로스페이드된다(42번).
+   헤더(시계+날씨)와 도크는 이 wrapper 밖에 있어 모드/idle 상태와 무관하게 항상 그대로다. */
+.app-body {
+  position: relative;
   flex: 1 1 auto;
   min-height: 0;
+}
+
+.app-main {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
   display: flex;
+  opacity: 1;
+  transition: opacity 0.9s ease;
+}
+
+/* 사진 모드에서 하단에 정보(달력/일정/주식)가 아니라 사진을 보여줘야 할 때 달력을 숨긴다
+   (기존 .app-content.is-idle과 동일한 opacity 방식, 범위만 하단 영역으로 좁혔다). */
+.app-main.is-idle {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* 사진 모드 전용 하단 사진 표시 영역. PhotoBackground를 그대로 재사용하되(로직 변경 없음),
+   기존 .photo-background-layer(전체 화면 고정, ScreenSaver 등에서 그대로 사용 중)와 달리
+   이 영역 안에서는 absolute로 오버라이드해 헤더를 가리지 않고 이 박스 안에서만 표시한다. */
+.photo-panel {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  overflow: hidden;
+  background-color: #05060a;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.9s ease;
+}
+
+.photo-panel.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.photo-panel .photo-background-layer {
+  position: absolute;
 }
 
 .app-footer {
@@ -626,9 +660,22 @@
   gap: 1.4vw;
 }
 
+/* 사진 모드에서 하단에 사진이 보일 때 Market도 달력과 함께 숨긴다(터치하면 둘 다 같이
+   다시 나타남 — 기존 동작 그대로, 범위만 하단 영역으로 좁혔다). */
+.market-wrap {
+  flex: 1 1 auto;
+  min-width: 0;
+  opacity: 1;
+  transition: opacity 0.9s ease;
+}
+
+.market-wrap.is-idle {
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* Market (footer) */
 .market {
-  flex: 1 1 auto;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -865,59 +912,10 @@
   background-color: rgba(5, 6, 10, 0.5);
 }
 
-/* Idle Mode(대기 화면) 레이어. 항상 마운트되어 있지만 opacity로만 나타나고 사라진다. */
-.idle-layer {
-  position: absolute;
-  inset: 0;
-  z-index: 3;
-  pointer-events: none;
-}
-
-.idle-screen {
-  position: absolute;
-  inset: 0;
-  background-color: #05060a;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.9s ease;
-}
-
-.idle-screen.is-visible {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.idle-clock {
-  position: absolute;
-  top: max(3vh, env(safe-area-inset-top, 0px) + 2.4vh);
-  left: max(3vw, env(safe-area-inset-left, 0px) + 2.4vw);
-  z-index: 2;
-  display: flex;
-  flex-direction: column;
-  gap: 0.6vh;
-  color: #f5f6fa;
-  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.65);
-}
-
-/* 사진 모드는 '탁상시계 + 디지털 앨범'이 핵심이라 시계를 멀리서도 바로 읽히도록
-   정보모드 시계(.clock-time)보다 크게 키운다. 1366px 기준 약 150~165px가 되도록
-   11.3vw를 기준값으로 사용(기존 9vw 대비 약 25% 증가). */
-.idle-time {
-  font-size: clamp(48px, 11.3vw, 170px);
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  line-height: 1;
-}
-
-.idle-date {
-  font-size: clamp(15px, 2.45vw, 36px);
-  font-weight: 500;
-  color: #e2e4ea;
-}
-
-/* 앱 전체 30분 대기(디지털 액자) 레이어. 기존 idle-layer(사진 모드 전용 짧은 대기)보다 위에서
-   기본/사진 모드 어느 화면이든 덮는다. 구조와 opacity 전환 방식은 idle-layer/idle-screen과
-   동일하게 맞췄다(다중 blur 금지, 무거운 효과 없음). */
+/* 앱 전체 30분 대기(디지털 액자) 레이어. app-content(z-index 2)보다 위에서 기본/사진
+   모드 어느 화면이든 덮는다. 구조와 opacity 전환 방식은 photo-panel과 동일하게 맞췄다
+   (다중 blur 금지, 무거운 효과 없음). 이 기능(ScreenSaver)은 42번 사진 모드 하단 개편과
+   무관하게 그대로 유지한다. */
 .screensaver-layer {
   position: absolute;
   inset: 0;
